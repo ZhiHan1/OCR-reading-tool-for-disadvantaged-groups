@@ -1,7 +1,8 @@
-# 提示词（Codex 长期上下文）
+# 提示词（长期上下文）
 
-> 本文件是项目根目录 `PROMPT_OCR_READER_KB.md` 的副本，放在知识库内以便整体搬运。
-> **两份必须保持一致**：改动任意一份后，同步另一份（可用字节级脚本比对差异）。
+> 本文件是 AI 助手（Codex / Claude / 其他）的**唯一有效提示词副本**。
+> 根目录旧副本 `PROMPT_OCR_READER_KB.md` 已归档到
+> `KNOWLEDGE/archive/PROMPT_OCR_READER_KB_根目录旧副本.md`，内容过时，勿引用、勿同步。
 
 ```text
 ===PROMPT-START===
@@ -11,10 +12,24 @@
 
 # 项目
 名称：OCR 朗读工具（模块化重构版）
+定位：面向阅读障碍与低视力用户的桌面辅助工具
 根目录：本项目根目录（下文所有路径都相对于它）
 技术栈：Python 3.14 + PySide6(Qt6) + QWebEngineView + HTML/CSS/原生 JS
 形态：桌面应用。UI 是本地 Web 页面，通过 QWebChannel 调用 Python 后端。
-注意：项目不在 git 仓库中，改动无回滚点，必须自己留备份或做反向验证。
+
+# 仓库
+远程：https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git
+分支：main（主线）· 许可证 MIT
+已建立 git 仓库，改动有回滚点，但仍建议重要改动前留备份并做反向验证。
+⚠ 本机目录 D:\Project_File 归属旧 SID，git 需 safe.directory（已在全局配置）。
+⚠ 访问 GitHub 需代理 127.0.0.1:7890（已配在本仓库 http.proxy 局部配置）。
+
+不该进仓库的东西（.gitignore 已覆盖，别手动 --force 添加）：
+- 模型权重：模型/翻译/*.gguf、模型/语音/*/、models/asr/*/、models/ocr/*.onnx
+  （共 2.3 GB，GitHub 单文件上限 100 MB）
+- config.yaml：含本机热词、模型路径、在线服务 API Key
+- models/asr/registry.json、models/local/*.json：记录本机模型名，换机即失效
+- dist/、build/、logs/、__pycache__/、.cache/
 
 # 知识库（先看这里）
 KNOWLEDGE/INDEX.md 是入口，含全部条目 ID（KB-ARC / WEB / API / SEL / ASR / PERF / GOT）。
@@ -72,7 +87,7 @@ index.html 加载顺序固定：
   → ui(components, sidebar, topbar, result) → pages(home, translate, tts, voice, settings, about)
   → router.js → app.js
 所有脚本用传统 <script> 而不用 ES module（file:// 下 module 会被 CORS 拦截）。
-所有子资源带统一版本号 ?v=YYYYMMDDxx，当前为 20261105a。
+所有子资源带统一版本号 ?v=YYYYMMDDxx，当前为 20261105c（index.html 共 24 处，必须一起改）。
 
 # 前端 ↔ 后端契约
 出站：APP.bridge.call(action, payload) → Promise
@@ -108,8 +123,7 @@ Python 方法名 = "do_" + action，缺方法返回 {ok:false, error:"未知动�
 6. 所有入口函数都要有守门测试。曾因 selector.py 漏导入 QApplication，
    select() 抛 NameError 被适配器吞成 None，表现为「框选后无任何反应」，
    而当时的手工测试绕过了 select() 入口，所以没发现。
-7. 路径与编码（高频事故点）：
-   - 一律优先用相对路径（相对项目根目录）。文档、测试、脚本、命令行参数都如此；
+7. 路径与编码（高频事故点）：   - 一律优先用相对路径（相对项目根目录）。文档、测试、脚本、命令行参数都如此；
      只有在确实需要跨机器引用时才用绝对路径，并说明原因。
      绝对路径含中文（如带「语音朗读工具」「籽寒」的路径）在编码、转义、粘贴
      环节极易出错，本项目已经因此发生过文件损坏事故。
@@ -144,6 +158,10 @@ Python 方法名 = "do_" + action，缺方法返回 {ok:false, error:"未知动�
 两种修复都有回归测试 tests/test_asr_quality.py（10 例）。
 三种识别模式：manual（手动结束）/ realtime（实时分段）/ auto（说完自动结束）。
 分段停顿 segment_silence_ms 不结束整轮；整轮结束由 turn_silence_ms 判定。
+麦克风设备：asr.device_name 存设备名字符串（空=系统默认），不存索引。
+  启动时 WebApi 枚举一次缓存到 _input_devices；跨 MME/DirectSound/WASAPI/WDM-KS
+  按名字前缀归并去重（本机 55 端口 → 15 设备）；选了设备但已拔出会明确报错，
+  不静默回退。详见 KB-ASR-011（asr.md §10）。
 
 # 检索顺序（回答前先做）
 1. 找动作名 → qt_web/api.py 里搜 do_<action>
@@ -161,11 +179,22 @@ Python 方法名 = "do_" + action，缺方法返回 {ok:false, error:"未知动�
   `legacy/` 删除，`tools/split_reference_css.py` 因此暂不可用，见 KB-PERF-009）。
 - 所有命令在项目根目录执行，使用相对路径，例如：
     py -3.14 -m unittest tests.test_selector tests.test_asr_quality -v
-    py -3.14 -m tools.smoke_gui
+    py -3.14 tools/smoke_gui.py
     py -3.14 tools/mem_report.py [--dev|--exe]
 - 修 Bug 要补守门测试，并做反向验证（回退修复后测试必须失败），证明测试有效。
 - 查不到业界做法时先搜索主流实现（Qt 官方文档、flameshot、PySide6 issue），
   不要凭直觉设计，也不要把"看起来能跑"当成验证过。
+
+# Git 提交规范
+中文 Conventional Commits：`type(scope): 中文描述`
+- type：feat / fix / docs / refactor / test / perf / build / chore
+- scope：voice / ocr / tts / trans / settings / web / api / build / knowledge
+- 示例：`feat(voice): 支持选择麦克风输入设备`
+⚠ 写提交信息用 `-F <文件>` 且文件必须 UTF-8 **无 BOM**；
+  PowerShell 的 `-Encoding utf8` 会加 BOM，导致提交信息首字符异常。
+  改用 Python 写 bytes，或 `git commit --amend -F` 修正。
+- 提交前自检：`git status --short` 应无模型/配置/构建产物。
+- 推送需代理：`git -C <repo> push`（http.proxy 已在该仓库本地配置）。
 
 # 本机环境（测试时注意）
 主屏 \\.\DISPLAY1 逻辑 1536×960 @125%，物理 1920×1200，原点 (0,0)。

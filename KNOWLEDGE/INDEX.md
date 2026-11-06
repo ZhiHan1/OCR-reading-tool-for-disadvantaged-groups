@@ -147,6 +147,8 @@
 | KB-GOT-007 | 运行中手改 `config.yaml` 会被关窗覆盖 | gotchas.md §5.1 |
 | KB-GOT-008 | 打包与发布（`build_web.py`、自适应模型 staging、自检项） | gotchas.md §9 |
 | KB-GOT-009 | 动画 bug 的三帧采样法（起始必须是旧页） | gotchas.md §6.5 |
+| KB-GOT-010 | 仓库与 Git：远程地址、不入库清单、dubious ownership、代理 | gotchas.md §10 |
+| KB-GOT-011 | 提交信息绝不能带 BOM（PowerShell `-Encoding utf8` 陷阱） | gotchas.md §10.4 |
 
 ## 四、维护约定
 
@@ -155,3 +157,24 @@
 2. 新增条目一律追加在对应文件末尾，ID 顺延，不重排旧 ID。
 3. 每条结论要能落到 `文件:行号` 或实测数据，否则标注「待验证」。
 4. 本目录只放结论与方法，不放截图、日志、模型二进制。
+5. 仓库：`https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups`，
+   `main` 分支，MIT 许可。提交信息用中文 Conventional Commits，
+   编码约定见 KB-GOT-010 / KB-GOT-011。
+
+## 五、仓库信息（速查）
+
+| 项 | 值 |
+| --- | --- |
+| 远程 | `https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git` |
+| 分支 | `main` |
+| 许可证 | MIT（`LICENSE`） |
+| 面向文档 | `README.md`（功能/安装/开发约定）、`CHANGELOG.md`、`WEB_RELEASE.md`、`CONFIGURATION.md` |
+| 仓库政策 | `.gitignore`（排除模型与 `config.yaml`）、`.gitattributes`（统一 LF） |
+| 首次提交 | 2026-11-06 · 159 文件 · 26904 行 |
+
+**不入库**：模型权重（2.3 GB）、`config.yaml`、`models/asr/registry.json`、
+`dist/`、`build/`、`logs/`、`__pycache__/`。
+
+**本机注意**：
+- 目录属旧 SID，需 `git config --global --add safe.directory <本目录>`
+- GitHub 需代理 `127.0.0.1:7890`（已配在仓库本地 `http.proxy`）

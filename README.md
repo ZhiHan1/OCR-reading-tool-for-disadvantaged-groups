@@ -225,6 +225,8 @@ py -3.14 build_web.py --tag v1.0.0       # 带版本标签
 
 ## 开发约定
 
+> 完整约定见 [`AGENTS.md`](AGENTS.md)，以下是摘要。
+
 ### 分层纪律
 
 ```text
@@ -269,7 +271,7 @@ test(settings): 增加页签动画三帧采样用例
 | 文件 | 内容 |
 | --- | --- |
 | `INDEX.md` | 全部 `KB-xxx-000` 条目索引 |
-| `PROMPT.md` | 给 AI 助手的角色与约束提示词 |
+| `PROMPT.md` | 给 AI 助手的角色与约束提示词（唯一有效副本） |
 | `architecture.md` | 分层架构与调用链 |
 | `frontend.md` | 前端页面组织、路由、动画 |
 | `backend-api.md` | `do_xxx` 动作清单与返回约定 |

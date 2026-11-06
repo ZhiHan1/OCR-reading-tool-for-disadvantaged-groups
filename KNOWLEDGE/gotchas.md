@@ -199,4 +199,91 @@ staging（OCR 权重 / 语音模型 / CUDA 运行库）→ `verify_web_release.p
   worker IPC 录音启停、双 EXE 依赖隔离。`release-test.json` 的 `ok=true` 才算通过。
 - 2026-11-05 的改动：`stage_voice_models.py` 与 `verify_web_release.py`
   去掉 SenseVoiceSmall 硬编码，改为按实际模型自适应（此前缺该目录会直接打包失败）。
+- 2026-11-05 新增自检项 `microphone_listing`：由 worker 自检报告 `input_devices`，
+  要求非空。GUI 进程不加载 sounddevice，真正打开设备的永远是语音子进程。
+  当前共 25 项检查。
+
+## 10. 仓库与 Git（KB-GOT-010）
+
+### 10.1 基本信息
+
+| 项 | 值 |
+| --- | --- |
+| 远程 | `https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git` |
+| 分支 | `main` |
+| 许可证 | MIT |
+| 首次提交 | 2026-11-06，159 个文件 / 26904 行 |
+| 约定 | 中文 Conventional Commits、UTF-8 无 BOM、仓库内 LF |
+
+### 10.2 哪些东西不进仓库
+
+| 内容 | 原因 |
+| --- | --- |
+| `模型/翻译/*.gguf`、`模型/语音/*/` | 约 2.3 GB，GitHub 单文件上限 100 MB |
+| `models/asr/*/`、`models/ocr/*.onnx` | 同上，由 `tools/download_asr_models.py` 获取 |
+| `config.yaml` | 含本机热词（139 条）、模型路径、在线服务 API Key |
+| `models/asr/registry.json` | 记录本机模型名，换机器就失效 |
+| `dist/`、`build/`、`logs/`、`__pycache__/`、`.cache/` | 构建产物与运行时数据 |
+
+**不要用 `git add -f` 绕过**：这会把 1.4 GB 的 GGUF 提交进历史，
+即使后来删除，`.git` 体积也永久膨胀，需要 `git filter-repo` 才能清理。
+
+### 10.3 两个本机环境坑
+
+**（1）dubious ownership**
+
+`D:\Project_File` 整个目录的 Owner 是旧 Windows 账户的 SID
+（`S-1-5-21-3435860081-...`），与当前用户
+（`S-1-5-21-3107991029-...`）不一致，Git 会拒绝一切操作并提示
+`detected dubious ownership`。
+
+```powershell
+# 只对该目录加例外，不要用 --global --add safe.directory '*'
+git config --global --add safe.directory 'D:/Project_File/语音朗读工具/OCR模块化项目'
+```
+
+**（2）GitHub 需要代理**
+
+直连 `ls-remote` 会 `Recv failure: Connection was reset`。
+本机系统代理为 `127.0.0.1:7890`，但 Git 不读系统代理：
+
+```powershell
+git config http.proxy "http://127.0.0.1:7890"   # 只在本仓库生效
+git config https.proxy "http://127.0.0.1:7890"
+```
+
+### 10.4 提交信息不要带 BOM（KB-GOT-011）
+
+PowerShell 的 `-Encoding utf8` **会写 BOM**（Windows PowerShell 5.1 行为），
+`git commit -F` 读进去后提交信息首字符异常，`git log --format=%s`
+会显示成一个不可见字符。
+
+正确做法（任选）：
+
+```powershell
+# 方案 A：用 Python 字节级写无 BOM 文件
+py -3.14 -c "from pathlib import Path; Path('msg.txt').write_bytes('feat: 标题'.encode('utf-8'))"
+git commit -F msg.txt
+
+# 方案 B：PowerShell 7 显式无 BOM
+'feat: 标题' | Set-Content msg.txt -Encoding utf8NoBOM
+
+# 方案 C：已提交但未推送，直接修正
+git commit --amend -F msg.txt
+```
+
+验证：`git log -1 --format=%s | Format-Hex`，前两字节应为 `66 65`（`fe`），
+不是 `EF BB BF`。
+
+### 10.5 日常流程
+
+```powershell
+git status --short                 # 先看有没有误加模型/配置
+git add -A
+git commit -F msg.txt              # msg.txt 必须是 UTF-8 无 BOM
+git push                           # 代理已配在仓库本地
+```
+
+README 的「快速开始」与「提交规范」是面向贡献者的说明，
+改动仓库约定时两边一起更新。
 
