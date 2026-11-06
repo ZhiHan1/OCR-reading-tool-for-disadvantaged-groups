@@ -1,0 +1,95 @@
+# ??????????????????????? config.yaml?
+hotkeys:
+  func1_trigger: f7
+  func2_select: f9
+  func2_read: f8
+  func3_toggle: f4
+  func3_reselect: f5
+  stop_speak: f6
+tts:
+  rate: 0
+  volume: 1.0
+  voice_name: ''
+  pitch: 0
+  backend: sapi
+  edge_voice: zh-CN-XiaoxiaoNeural
+  cache_max: 128
+  func1_queue_mode: false
+  func2_queue_mode: true
+  test_text: ????????????????????
+recognition:
+  func1_copy: false
+  func2_copy: false
+  func1_read: true
+  func2_read: true
+ocr:
+  device: cpu
+  # 预热策略：lazy = 首次识别时加载（省约 65MB）；startup = 启动即后台加载
+  warmup: lazy
+  func3:
+    scan_interval: 0.4
+    repeat_cooldown: 3.0
+    similarity_threshold: 0.85
+    min_length_for_similarity: 3
+    stable_frames: 2
+    short_text_max_len: 2
+  manga_mode:
+    scan_interval: 0.4
+    stable_frames: 2
+    history_size: 6
+  game_mode:
+    scan_interval: 0.3
+    stable_frames: 2
+    history_size: 5
+selector:
+  dim_factor: 0.3
+  spotlight_brightness: 1.0
+  selection_color: '#FFD400'
+  selection_width: 2
+  show_info: false
+debug:
+  save_processed_image: false
+performance:
+  # BLAS 线程数（0 = 不干预）。限制后每个进程少提交约 400~900MB，
+  # 实测识别延迟 +4%；详见 utils/env_limits.py。
+  blas_threads: 4
+asr:
+  backend: local
+  local_model: paraformer_large
+  copy_to_clipboard: true
+  floating_window: false
+  auto_input: true
+  input_mode: manual
+  segment_silence_ms: 800
+  turn_silence_ms: 3000
+  # 语音子进程闲置多少秒后退出（释放约 2GB）。0 = 常驻不退出。
+  # 退出后下次识别需重新加载模型，实测约 11~14 秒。
+  idle_exit_seconds: 300
+  # 麦克风设备名（sounddevice 的 name 字符串）；留空 = 跟随系统默认输入设备。
+  device_name: ''
+  # 热词是用户数据，没有前端编辑入口；恢复默认/导入配置时会保留当前词表。
+  hotwords: []
+  hotword_threshold: 0.8
+  hotword_fuzzy: true
+translation:
+  source_lang: auto
+  target_lang: zh
+  # 翻译模型闲置多少秒后卸载（GGUF 约 1.4GB）。0 = 不自动卸载。
+  idle_unload_seconds: 60
+  func1_enabled: false
+  func2_enabled: false
+  func3_enabled: false
+  manga_enabled: false
+  game_enabled: false
+  model: gguf
+  active_provider: ''
+  online_providers: []
+ui:
+  func1_enabled: true
+  func2_enabled: true
+  func3_enabled: true
+  manga_enabled: true
+  game_enabled: true
+  web_frost: true
+  web_theme: dark
+

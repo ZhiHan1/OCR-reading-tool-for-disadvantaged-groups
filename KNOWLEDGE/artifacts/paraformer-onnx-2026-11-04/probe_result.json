@@ -1,0 +1,63 @@
+{
+  "model": "paraformer-large",
+  "original_pt_mb": 859.0,
+  "fp32_onnx_mb": 843.9,
+  "int8_onnx_mb": 234.1,
+  "ratio_vs_pt": 0.982,
+  "int8_vs_pt_ratio": 0.273,
+  "load_seconds": 2.0,
+  "export_seconds": 0.0,
+  "quantize_seconds": 55.0,
+  "onnx_inputs": [
+    {
+      "name": "speech",
+      "shape": [
+        "batch_size",
+        "feats_length",
+        "560"
+      ],
+      "type": "tensor(float)"
+    },
+    {
+      "name": "speech_lengths",
+      "shape": [
+        "batch_size"
+      ],
+      "type": "tensor(int32)"
+    }
+  ],
+  "onnx_outputs": [
+    {
+      "name": "logits",
+      "shape": [
+        "batch_size",
+        "logits_length",
+        "8404"
+      ],
+      "type": "tensor(float)"
+    },
+    {
+      "name": "token_num",
+      "shape": [
+        "Casttoken_num_dim_0"
+      ],
+      "type": "tensor(int32)"
+    },
+    {
+      "name": "us_alphas",
+      "shape": [
+        "batch_size",
+        "alphas_length"
+      ],
+      "type": "tensor(float)"
+    },
+    {
+      "name": "us_cif_peak",
+      "shape": [
+        "batch_size",
+        "alphas_length"
+      ],
+      "type": "tensor(float)"
+    }
+  ]
+}

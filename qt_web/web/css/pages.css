@@ -1,0 +1,60 @@
+/* 自动拆分自 ui/ui_template.html 第 711-767 行 —— 翻译模型导航行、弹窗、响应式媒体查询
+   参考文件保持原样，本文件由 tools/split_reference_css.py 生成。 */
+  /* ===== 翻译模型导航行 ===== */
+  .model-nav { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+
+  /* ===== 弹窗 ===== */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 200; display: none;
+    align-items: center; justify-content: center; padding: 24px;
+    background: rgba(6,9,18,0.52);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .modal-mask.open { display: flex; }
+  .modal {
+    width: 100%; max-width: 660px; max-height: calc(100vh - 48px);
+    overflow-y: auto; padding: 24px;
+    border-radius: var(--r-lg);
+    background: var(--modal-bg);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--sh-lg), inset 0 1px 0 var(--hi);
+    animation: modalIn .22s cubic-bezier(.2,.8,.3,1);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(14px) scale(.985); }
+    to   { opacity: 1; transform: none; }
+  }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .modal-title { font-size: 17px; font-weight: 800; color: var(--t1); letter-spacing: .2px; }
+  .modal-desc { font-size: 12px; color: var(--t4); margin: 6px 0 18px; line-height: 1.65; }
+  .modal-close {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 15px;
+    background: var(--glass-2); color: var(--t3);
+    box-shadow: inset 0 0 0 1px var(--line); transition: all .15s;
+  }
+  .modal-close:hover { background: var(--glass-hover); color: var(--t1); }
+  .modal-foot {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line);
+  }
+  .modal-note {
+    margin-top: 12px; padding: 10px 13px; border-radius: 10px;
+    background: var(--glass-2); border: 1px solid var(--line);
+    font-size: 11.5px; color: var(--t3); line-height: 1.75; white-space: pre-line;
+  }
+  .modal .field { grid-template-columns: 110px 1fr; padding: 8px 0; }
+  .modal .field + .field { border-top: none; }
+  .modal .select, .modal .field-ctl input { min-width: 0; }
+  .modal textarea.ta { font-family: Consolas, ui-monospace, monospace; font-size: 12px; }
+
+  @media (max-width: 1080px) {
+    .grid-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 76px 1fr; }
+    .brand-name, .brand-sub, .nav-item span.txt, .nav-group, .engine-pill .label { display: none; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .field { grid-template-columns: 1fr; gap: 6px; }
+    .mode-actions { margin-left: 0; }
+  }

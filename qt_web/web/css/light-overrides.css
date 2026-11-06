@@ -1,0 +1,94 @@
+/* 自动拆分自 ui/ui_template.html 第 618-710 行 —— 亮色主题下控件细节修正（下拉/滚动条/标签栏/语义按钮等）
+   参考文件保持原样，本文件由 tools/split_reference_css.py 生成。 */
+  /* ============================================================
+     亮色主题细节适配
+     目标：白底上不出现霓虹外发光、不用浅色描边、层级靠阴影而非发光
+     ============================================================ */
+
+  /* 下拉选项 / 滚动条 */
+  html[data-theme="light"] .select option { background: #ffffff; color: #0d1220; }
+  html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(16,24,45,.16); background-clip: content-box; }
+  html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(16,24,45,.28); background-clip: content-box; }
+
+  /* 标签栏：白卡片里再叠白会糊成一片，改成浅灰凹槽 */
+  html[data-theme="light"] .tabs { background: rgba(16,24,45,0.045); }
+
+  /* 选中态滑块（侧边栏 / 标签）：在白底上要更明确 */
+  html[data-theme="light"] .nav-pill,
+  html[data-theme="light"] .tab-pill {
+    background: linear-gradient(135deg, rgba(10,159,178,0.14), rgba(113,88,240,0.14));
+    box-shadow: inset 0 0 0 1px rgba(10,159,178,0.20);
+  }
+
+  /* 关于页的小特性块：和白卡片同色会消失，加一层浅灰 */
+  html[data-theme="light"] .feat { background: rgba(16,24,45,0.035); }
+
+  /* 彩色渐变元素：去掉霓虹光，换成一层柔和落影 */
+  html[data-theme="light"] .brand-logo,
+  html[data-theme="light"] .about-logo {
+    box-shadow: 0 8px 20px -10px rgba(88,66,205,0.42), inset 0 1px 0 rgba(255,255,255,.45);
+  }
+  html[data-theme="light"] .btn.primary {
+    box-shadow: 0 6px 16px -9px rgba(88,66,205,0.5), inset 0 1px 0 rgba(255,255,255,.32);
+  }
+  html[data-theme="light"] .btn.primary:hover {
+    box-shadow: 0 9px 22px -9px rgba(88,66,205,0.6), inset 0 1px 0 rgba(255,255,255,.32);
+  }
+  html[data-theme="light"] .talk-btn {
+    box-shadow: 0 10px 26px -14px rgba(88,66,205,0.5), inset 0 1px 0 rgba(255,255,255,.32);
+  }
+  html[data-theme="light"] .talk-btn:hover {
+    box-shadow: 0 14px 32px -14px rgba(88,66,205,0.6), inset 0 1px 0 rgba(255,255,255,.32);
+  }
+  html[data-theme="light"] .talk-btn.recording {
+    color: #ffffff; box-shadow: 0 10px 26px -14px rgba(229,70,106,0.5);
+  }
+
+  /* 功能图标：白底不需要外发光，只保留 1px 细边 */
+  html[data-theme="light"] .func-icon.c { box-shadow: inset 0 0 0 1px var(--ring-c); }
+  html[data-theme="light"] .func-icon.v { box-shadow: inset 0 0 0 1px var(--ring-v); }
+  html[data-theme="light"] .func-icon.g { box-shadow: inset 0 0 0 1px var(--ring-g); }
+  html[data-theme="light"] .func-icon.a { box-shadow: inset 0 0 0 1px var(--ring-a); }
+  html[data-theme="light"] .func-icon.r { box-shadow: inset 0 0 0 1px var(--ring-r); }
+
+  /* 状态小圆点：亮色下不要发光，靠颜色区分即可 */
+  html[data-theme="light"] .dot,
+  html[data-theme="light"] .status-text .sdot { box-shadow: none; }
+
+  /* 侧边栏选中条：去掉霓虹投影 */
+  html[data-theme="light"] .nav-pill::before { box-shadow: none; }
+
+  /* 主题模式卡片选中态：阴影收敛 */
+  html[data-theme="light"] .theme-mode.active {
+    box-shadow: 0 0 0 1px var(--cyan), 0 6px 18px -10px rgba(10,159,178,0.35);
+  }
+
+  /* 彩色语义按钮：亮色下必须加重底色与描边，
+     否则 0.1 级别的淡染在白卡片上几乎等于白底，看不出这是按钮 */
+  html[data-theme="light"] .btn.success {
+    background: rgba(18,185,129,0.17);
+    color: #06694a;
+    box-shadow: inset 0 0 0 1px rgba(18,185,129,0.50), 0 2px 6px -3px rgba(18,185,129,0.45);
+  }
+  html[data-theme="light"] .btn.success:hover:not(:disabled) { background: rgba(18,185,129,0.27); }
+
+  html[data-theme="light"] .btn.warn {
+    background: rgba(217,138,6,0.17);
+    color: #7d5009;
+    box-shadow: inset 0 0 0 1px rgba(217,138,6,0.50), 0 2px 6px -3px rgba(217,138,6,0.45);
+  }
+  html[data-theme="light"] .btn.warn:hover:not(:disabled) { background: rgba(217,138,6,0.27); }
+
+  html[data-theme="light"] .btn.danger {
+    background: rgba(229,70,106,0.16);
+    color: #a52241;
+    box-shadow: inset 0 0 0 1px rgba(229,70,106,0.50), 0 2px 6px -3px rgba(229,70,106,0.45);
+  }
+  html[data-theme="light"] .btn.danger:hover:not(:disabled) { background: rgba(229,70,106,0.26); }
+
+  /* 但禁用态必须压过上面这些彩色规则，保持统一的灰色 */
+  html[data-theme="light"] .btn:disabled {
+    background: var(--glass-2);
+    color: var(--t4);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }

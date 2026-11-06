@@ -1,0 +1,69 @@
+# ============================================================
+# OCR 文字朗读工具 · Git 忽略规则
+# 原则：代码与文档进仓库，模型权重、构建产物、本机配置一律不进。
+# ============================================================
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# ---- 构建产物 ----
+build/
+dist/
+*.spec.bak
+*.manifest
+
+# ---- 测试与类型检查缓存 ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- 运行时数据 ----
+logs/
+*.log
+
+# ---- 本机配置（含热词、模型路径、API Key，不得上传）----
+config.yaml
+config.*.yaml
+!defaults.yaml
+
+# ---- 模型权重（体积大，见 README「模型准备」）----
+# 翻译 GGUF / 语音 paraformer / SenseVoice / VAD / 标点 / OCR
+模型/翻译/*.gguf
+模型/翻译/*/
+模型/语音/*/
+models/asr/*/
+models/ocr/*.onnx
+models/local/*.json
+# 模型登记簿记录的是本机模型名，换台机器就失效，不入库
+models/asr/registry.json
+models/asr/registry.json.bak
+# HuggingFace 下载缓存（FunASR / transformers 自动生成）
+.cache/
+**/.cache/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 临时文件 ----
+*.tmp
+*.bak
+~$*
+
+# ---- 安全：任何真实密钥 ----
+*.key
+*.pem
+.env
+.env.*

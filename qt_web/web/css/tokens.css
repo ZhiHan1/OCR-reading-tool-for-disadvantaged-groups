@@ -1,0 +1,249 @@
+/* 自动拆分自 ui/ui_template.html 第 8-255 行 —— 设计变量：深色 :root、亮色主题、亮色光球细节、毛玻璃开/关
+   参考文件保持原样，本文件由 tools/split_reference_css.py 生成。 */
+  /* ============================================================
+     OCR 文字朗读工具 —— 玻璃拟态 UI 模板（功能完整版）
+     配色保留：深色渐变 + 青紫霓虹 + 玻璃层次
+     排版重做：语义分组 / 统一栅格 / 明确字号层级 / 内容限宽
+     ============================================================ */
+  :root {
+    /* 底色 */
+    --bg-0: #0b0d16;
+    --bg-1: #111527;
+    --bg-2: #171c33;
+
+    /* 玻璃 */
+    --glass:        rgba(255,255,255,0.05);
+    --glass-2:      rgba(255,255,255,0.075);
+    --glass-hover:  rgba(255,255,255,0.12);
+    --line:         rgba(255,255,255,0.09);
+    --line-strong:  rgba(255,255,255,0.16);
+    --hi:           rgba(255,255,255,0.30);  /* 顶边高光 */
+
+    /* 文字层级 */
+    --t1: #f2f5fb;   /* 主标题 */
+    --t2: #c2c9da;   /* 正文 */
+    --t3: #8b93a8;   /* 次要 */
+    --t4: #5d6478;   /* 极弱 */
+
+    /* 霓虹 */
+    --cyan:   #4dd8e0;
+    --violet: #8b7bff;
+    --green:  #3ce0a0;
+    --amber:  #ffb454;
+    --rose:   #ff6b8a;
+
+    --cyan-s:   rgba(77,216,224,0.15);
+    --violet-s: rgba(139,123,255,0.16);
+    --green-s:  rgba(60,224,160,0.15);
+    --amber-s:  rgba(255,180,84,0.15);
+    --rose-s:   rgba(255,107,138,0.15);
+
+    /* 圆角 / 阴影 */
+    --r-sm: 10px;
+    --r:    16px;
+    --r-lg: 22px;
+    --sh:    0 18px 44px -18px rgba(0,0,0,0.7);
+    --sh-lg: 0 28px 64px -18px rgba(0,0,0,0.85);
+
+    /* 间距节奏 */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 24px; --sp-6: 32px;
+
+    /* 毛玻璃模糊强度 / 渐变按钮上的文字色 */
+    --gb: 22px;
+    --btn-ink: #06121a;
+    --glow-1: rgba(139,123,255,0.20);
+    --glow-2: rgba(77,216,224,0.16);
+    --glow-3: rgba(60,224,160,0.06);
+    --orb-opacity: .55;
+
+    /* 彩色「墨色」文字：深色主题=霓虹原值，亮色主题换成更深的同色系 */
+    --ink-cyan:   #4dd8e0;
+    --ink-green:  #3ce0a0;
+    --ink-amber:  #ffb454;
+    --ink-rose:   #ff6b8a;
+
+    /* 细描边环（图标/徽章/彩色按钮的 1px 边） */
+    --ring-c: rgba(77,216,224,.38);
+    --ring-v: rgba(139,123,255,.38);
+    --ring-g: rgba(60,224,160,.38);
+    --ring-a: rgba(255,180,84,.38);
+    --ring-r: rgba(255,107,138,.38);
+
+    /* 蓝色（测试连接等中性操作） */
+    --blue-s:   rgba(91,141,214,0.16);
+    --ring-b:   rgba(91,141,214,.38);
+    --ink-blue: #7fb0ff;
+
+    /* 卡片细节 */
+    --card-hi: rgba(255,255,255,0.055);   /* 卡片顶部高光 */
+    --card-glow: .55;                      /* 功能卡右上角光晕强度 */
+    --inset-line: rgba(255,255,255,0.07);  /* 选中态内描边 */
+    --track: rgba(255,255,255,.12);        /* 开关/进度槽底色 */
+    --track-soft: rgba(255,255,255,.09);
+    --input-bg: rgba(255,255,255,0.025);   /* 输入框底色 */
+    --focus-bg: rgba(77,216,224,0.06);
+    --noise-op: 1;                         /* 噪点强度倍率 */
+    --thumb-ring: rgba(77,216,224,.28);
+    --modal-bg: linear-gradient(180deg, #1b2138, #141a2e);
+  }
+
+  /* ===== 亮色主题 ===== */
+  html[data-theme="light"] {
+    --bg-0: #d3dbee;
+    --bg-1: #eff4ff;
+    --bg-2: #dae1f1;
+
+    /* 玻璃更透一点，让背后的彩色光球能透上来（毛玻璃才看得出来）；
+       二级底色改用浅灰填充，控件（下拉/徽章/键帽）才有层次 */
+    --glass:       rgba(255,255,255,0.44);
+    --glass-2:     rgba(16,24,45,0.055);
+    --glass-hover: rgba(16,24,45,0.10);
+    --line:        rgba(16,24,45,0.10);
+    --line-strong: rgba(16,24,45,0.18);
+    --hi:          rgba(255,255,255,0.95);
+
+    /* 亮色下模糊要更重、饱和要更高，才压得住浅背景 */
+    --gb: 26px;
+
+    --t1: #0d1220;
+    --t2: #333c50;
+    --t3: #565f76;
+    --t4: #7d8598;
+
+    --cyan:   #0a9fb2;
+    --violet: #7158f0;
+    --green:  #12b981;
+    --amber:  #d98a06;
+    --rose:   #e5466a;
+
+    --cyan-s:   rgba(10,159,178,0.10);
+    --violet-s: rgba(113,88,240,0.10);
+    --green-s:  rgba(18,185,129,0.11);
+    --amber-s:  rgba(217,138,6,0.11);
+    --rose-s:   rgba(229,70,106,0.11);
+
+    /* 亮色下彩色文字统一压深，保证白底可读 */
+    --ink-cyan:   #07707e;
+    --ink-green:  #0b7a56;
+    --ink-amber:  #96600a;
+    --ink-rose:   #c02b4c;
+
+    --ring-c: rgba(10,159,178,.30);
+    --ring-v: rgba(113,88,240,.30);
+    --ring-g: rgba(18,185,129,.30);
+    --ring-a: rgba(217,138,6,.32);
+    --ring-r: rgba(229,70,106,.30);
+
+    --blue-s:   rgba(91,141,214,0.14);
+    --ring-b:   rgba(91,141,214,.42);
+    --ink-blue: #2f66b0;
+
+    --card-hi: rgba(255,255,255,0.45);
+    --card-glow: .16;
+    --inset-line: rgba(16,24,45,0.10);
+    --track: rgba(16,24,45,.15);
+    --track-soft: rgba(16,24,45,.09);
+    --input-bg: rgba(16,24,45,0.035);
+    --focus-bg: rgba(10,159,178,0.07);
+    --noise-op: .45;
+    --thumb-ring: rgba(10,159,178,.24);
+    --modal-bg: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,247,252,0.96));
+
+    /* 亮色阴影：更短、更淡、去掉彩色外发光 */
+    --sh:    0 10px 26px -16px rgba(30,40,70,0.30), 0 2px 6px -2px rgba(30,40,70,0.06);
+    --sh-lg: 0 18px 40px -16px rgba(30,40,70,0.34), 0 3px 10px -3px rgba(30,40,70,0.08);
+
+    --btn-ink: #ffffff;
+    --glow-1: rgba(113,88,240,0.34);
+    --glow-2: rgba(10,159,178,0.30);
+    --glow-3: rgba(18,185,129,0.18);
+    --orb-opacity: .85;
+  }
+
+  /* 亮色：背景要有「锐利细节」供毛玻璃打磨，否则开/关看不出区别 */
+  html[data-theme="light"] .orb {
+    filter: blur(18px);                          /* 预模糊减小，毛玻璃才有东西可磨 */
+  }
+  html[data-theme="light"] .orbs::before,
+  html[data-theme="light"] .orbs::after {
+    content: ""; position: absolute; border-radius: 50%;
+    border: 2px solid rgba(113,88,240,.20);      /* 锐利圆环：毛玻璃开=晕开，关=轮廓清晰 */
+  }
+  html[data-theme="light"] .orbs::before {
+    width: 320px; height: 320px; top: 10%; right: 18%;
+    border-color: rgba(10,159,178,.20);
+  }
+  html[data-theme="light"] .orbs::after {
+    width: 240px; height: 240px; bottom: 12%; right: 44%;
+    border-color: rgba(113,88,240,.18);
+  }
+  html[data-theme="light"] body::before {
+    content: ""; position: fixed; inset: -2px; z-index: 0; pointer-events: none;
+    /* 斜向柔光带：硬边色带看起来是设计感光带，但足够锐利 ——
+       开着毛玻璃会糊成均匀柔雾，关掉能看到清晰的带边，差异明显又不抢眼 */
+    background: linear-gradient(112deg,
+      rgba(113,88,240,.15) 0 11%,
+      rgba(255,255,255,0) 11% 29%,
+      rgba(10,159,178,.14)  29% 43%,
+      rgba(255,255,255,0) 43% 61%,
+      rgba(18,185,129,.12)  61% 73%,
+      rgba(255,255,255,0) 73% 100%);
+    -webkit-mask-image: radial-gradient(135% 115% at 50% 0%, #000 28%, transparent 92%);
+    mask-image: radial-gradient(135% 115% at 50% 0%, #000 28%, transparent 92%);
+  }
+
+  /* ===== 亮色毛玻璃：提高饱和 + 轻微提亮，浅背景上也能看出「磨砂」 ===== */
+  html[data-theme="light"] .sidebar,
+  html[data-theme="light"] .card,
+  html[data-theme="light"] .func-card {
+    backdrop-filter: blur(var(--gb)) saturate(200%) brightness(1.06);
+    -webkit-backdrop-filter: blur(var(--gb)) saturate(200%) brightness(1.06);
+  }
+
+  /* ===== 关闭毛玻璃：彻底去掉模糊，改用更实的底色 ===== */
+  html.no-frost { --gb: 0px; --glass: rgba(255,255,255,0.10); --glass-2: rgba(255,255,255,0.14); }
+  html[data-theme="light"].no-frost { --glass: rgba(255,255,255,0.97); --glass-2: rgba(16,24,45,0.055); }
+
+  /* 关掉时不留模糊层，切换效果才干脆 */
+  html.no-frost .sidebar,
+  html.no-frost .card,
+  html.no-frost .func-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    color: var(--t2);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    background:
+      radial-gradient(1100px 720px at 84% -14%, var(--glow-1), transparent 56%),
+      radial-gradient(940px 640px at -10% 110%, var(--glow-2), transparent 52%),
+      radial-gradient(760px 520px at 46% 54%, var(--glow-3), transparent 62%),
+      linear-gradient(158deg, var(--bg-1), var(--bg-0) 58%, var(--bg-2));
+    transition: background .3s ease;
+  }
+
+  /* 装饰光球：位于内容之下，供 backdrop-filter 模糊，让毛玻璃真正可见 */
+  .orbs { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: var(--orb-opacity); }
+  .orb.o1 { width: 420px; height: 420px; top: -80px; right: 8%; background: radial-gradient(circle, var(--violet), transparent 70%); }
+  .orb.o2 { width: 380px; height: 380px; bottom: -100px; left: 4%; background: radial-gradient(circle, var(--cyan), transparent 70%); }
+  .orb.o3 { width: 300px; height: 300px; top: 46%; left: 52%; background: radial-gradient(circle, var(--green), transparent 72%); }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    opacity: var(--noise-op);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  }
+
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 20px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.20); background-clip: content-box; }

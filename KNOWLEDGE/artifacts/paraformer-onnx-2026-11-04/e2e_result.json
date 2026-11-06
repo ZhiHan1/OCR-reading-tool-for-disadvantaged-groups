@@ -1,0 +1,13 @@
+{
+  "audio_seconds": 4.17,
+  "feat_shape": [
+    70,
+    560
+  ],
+  "feat_ms": 8767,
+  "infer_ms": 95,
+  "ref_text": "今天天气不错，我们出去走走吧",
+  "onnx_text": "去</s></s></s></s></s></s></s></s></s></s></s></s></s>",
+  "token_num": 14,
+  "fires": 14
+}

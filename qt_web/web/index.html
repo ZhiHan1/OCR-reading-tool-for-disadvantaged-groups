@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR 文字朗读工具</title>
+
+<!-- 样式按语义拆分，全部由 ui/ui_template.html 的 <style> 精确切分而来 -->
+<link rel="stylesheet" href="css/tokens.css?v=20261105c">
+<link rel="stylesheet" href="css/layout.css?v=20261105c">
+<link rel="stylesheet" href="css/components.css?v=20261105c">
+<link rel="stylesheet" href="css/panels.css?v=20261105c">
+<link rel="stylesheet" href="css/light-overrides.css?v=20261105c">
+<link rel="stylesheet" href="css/pages.css?v=20261105c">
+</head>
+<body>
+
+<!-- 背景光球（毛玻璃要模糊的目标） -->
+<div class="orbs">
+  <div class="orb o1"></div>
+  <div class="orb o2"></div>
+  <div class="orb o3"></div>
+</div>
+
+<div class="app">
+  <!-- ============ 侧边栏（导航项由 ui/sidebar.js 依据路由表生成） ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">读</div>
+      <div>
+        <div class="brand-name">OCR 朗读工具</div>
+        <div class="brand-sub">文字 · 朗读 · 翻译</div>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-pill" id="nav-pill"></div>
+      <!-- 导航项与分组由 ui/sidebar.js 注入 -->
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="engine-pill">
+        <span class="dot"></span>
+        <span class="label" id="engine-label">引擎运行中</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主区域 ============ -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="page-title"><span class="accent">首页</span></div>
+        <div class="page-desc" id="page-desc">选择一种识别方式开始朗读</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost sm" id="theme-toggle">☀️ 亮色</button>
+      </div>
+    </div>
+
+    <div class="content"><div class="content-inner" id="content"></div></div>
+
+    <!-- 结果显示区（仅首页显示，结构由 ui/result.js 填充） -->
+    <div class="result-area card" id="result-area"></div>
+
+    <div class="status-bar">
+      <span class="status-text" id="status-text"><span class="sdot"></span>就绪</span>
+      <button class="btn danger sm" id="stop-speak">⏹ 停止朗读</button>
+    </div>
+  </main>
+</div>
+
+<!-- ============ 弹窗容器 ============ -->
+<div class="modal-mask" id="modal-mask">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<!-- QWebChannel 协议（由 main.py 从 Qt 资源导出到 vendor/） -->
+<script src="js/vendor/qwebchannel.js"></script>
+
+<!-- 核心层：命名空间 / DOM 工具 / 桥接 / 主题 / 弹窗 -->
+<script src="js/core/namespace.js?v=20261105c"></script>
+<script src="js/core/dom.js?v=20261105c"></script>
+<script src="js/core/bridge.js?v=20261105c"></script>
+<script src="js/core/theme.js?v=20261105c"></script>
+<script src="js/core/keys.js?v=20261105c"></script>
+<script src="js/core/modal.js?v=20261105c"></script>
+
+<!-- 可复用 UI 组件（按钮/卡片/字段/开关/滑块/键帽/徽章/分区标题） -->
+<script src="js/ui/components.js?v=20261105c"></script>
+
+<!-- 通用区块（侧边栏 / 顶栏 / 结果区与状态栏） -->
+<script src="js/ui/sidebar.js?v=20261105c"></script>
+<script src="js/ui/topbar.js?v=20261105c"></script>
+<script src="js/ui/result.js?v=20261105c"></script>
+
+<!-- 各页面 -->
+<script src="js/pages/home.js?v=20261105c"></script>
+<script src="js/pages/translate.js?v=20261105c"></script>
+<script src="js/pages/tts.js?v=20261105c"></script>
+<script src="js/pages/voice.js?v=20261105c"></script>
+<script src="js/pages/settings.js?v=20261105c"></script>
+<script src="js/pages/about.js?v=20261105c"></script>
+
+<!-- 路由与启动 -->
+<script src="js/router.js?v=20261105c"></script>
+<script src="js/app.js?v=20261105c"></script>
+</body>
+</html>

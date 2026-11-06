@@ -1,0 +1,50 @@
+# ============================================================
+# Git 属性：统一换行与编码，避免 Windows/Linux 协作出现整文件 diff
+# ============================================================
+
+# 默认：文本文件在仓库内统一 LF，检出到工作区按平台转换
+* text=auto eol=lf
+
+# ---- 源码 ----
+*.py    text eol=lf
+*.pyi   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf
+*.ini   text eol=lf
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.spec  text eol=lf
+
+# ---- 二进制：不要做换行转换，Git 也无需计算文本 diff ----
+*.gguf  binary
+*.onnx  binary
+*.pt    binary
+*.pth   binary
+*.bin   binary
+*.safetensors binary
+*.wav   binary
+*.mp3   binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.zip   binary
+*.exe   binary
+*.dll   binary
+
+# ---- GitHub 语言统计：web 前端按独立语言统计，避免被 Python 淹没 ----
+qt_web/web/js/**       linguist-language=JavaScript
+qt_web/web/css/**      linguist-language=CSS
+qt_web/web/js/vendor/** linguist-vendored
+pyinstaller_hooks/**   linguist-language=Python

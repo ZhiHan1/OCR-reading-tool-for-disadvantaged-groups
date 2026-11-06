@@ -1,0 +1,74 @@
+[
+  {
+    "case": 1,
+    "ref": "今天天气不错，我们出去走走吧",
+    "audio_seconds": 4.17,
+    "native": "今天天气不错我们出去走走吧",
+    "onnx_int8": "今天天气不错我们出去走走吧",
+    "same": true,
+    "native_s": 0.348,
+    "feat_s": 0.008,
+    "onnx_s": 0.084,
+    "token_num": 14
+  },
+  {
+    "case": 2,
+    "ref": "请把这份文档翻译成英文",
+    "audio_seconds": 3.26,
+    "native": "请把这份文档翻译成英文",
+    "onnx_int8": "请把这份文档翻译成英文",
+    "same": true,
+    "native_s": 0.359,
+    "feat_s": 0.009,
+    "onnx_s": 0.07,
+    "token_num": 12
+  },
+  {
+    "case": 3,
+    "ref": "会议定在明天下午三点半",
+    "audio_seconds": 3.38,
+    "native": "会议定在明天下午三点半",
+    "onnx_int8": "会议定在明天下午三点半",
+    "same": true,
+    "native_s": 0.372,
+    "feat_s": 0.009,
+    "onnx_s": 0.071,
+    "token_num": 12
+  },
+  {
+    "case": 4,
+    "ref": "这个功能需要支持 offline 模式和 online 模式",
+    "audio_seconds": 4.92,
+    "native": "这个功能需要支持offline模式和online模式",
+    "onnx_int8": "这个功能需要支持offline模式和online模式",
+    "same": true,
+    "native_s": 0.496,
+    "feat_s": 0.01,
+    "onnx_s": 0.099,
+    "token_num": 18
+  },
+  {
+    "case": 5,
+    "ref": "第一季度营收同比增长百分之十七点五",
+    "audio_seconds": 4.45,
+    "native": "第一季度营收同比增长百分之十七点五",
+    "onnx_int8": "第一季度营收同比增长百分之十七点五",
+    "same": true,
+    "native_s": 0.431,
+    "feat_s": 0.012,
+    "onnx_s": 0.088,
+    "token_num": 18
+  },
+  {
+    "case": 6,
+    "ref": "我觉得这个方案在工程实现上风险比较高，需要再评估一下硬件资源占用和长期维护成本这两方面的问题",
+    "audio_seconds": 11.19,
+    "native": "我觉得这个方案在工程实现上风险比较高需要再评估一下硬件资源占用和长期维护成本这两方面的问题",
+    "onnx_int8": "我觉得这个方案在工程实现上风险比较高需要再评估一下硬件资源占用和长期维护成本这两方面的问题",
+    "same": true,
+    "native_s": 0.792,
+    "feat_s": 0.021,
+    "onnx_s": 0.201,
+    "token_num": 46
+  }
+]

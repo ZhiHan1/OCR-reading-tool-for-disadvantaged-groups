@@ -1,0 +1,67 @@
+[
+  {
+    "say": "请用酷纳万像帮我整理一下会议纪要",
+    "hotwords": [
+      "昆仑万象"
+    ],
+    "generate_raw": "请 用 库 纳 万 象 帮 我 整 理 一 下 会 议 纪 要",
+    "cleaned": "请用库纳万象帮我整理一下会议纪要",
+    "with_hotwords": "请用昆仑万象帮我整理一下会议纪要",
+    "changed": true,
+    "matches": [
+      {
+        "original": "库纳万象",
+        "replacement": "昆仑万象",
+        "score": 0.8462,
+        "start": 2,
+        "end": 6
+      }
+    ],
+    "expect_hit": true
+  },
+  {
+    "say": "智谱清炎这个模型效果怎么样",
+    "hotwords": [
+      "智谱清言"
+    ],
+    "generate_raw": "质 朴 清 颜 这 个 模 型 效 果 怎 么 样",
+    "cleaned": "质朴清颜这个模型效果怎么样",
+    "with_hotwords": "质朴清颜这个模型效果怎么样",
+    "changed": false,
+    "matches": [],
+    "expect_hit": false
+  },
+  {
+    "say": "打开欧拉玛然后拉取模型",
+    "hotwords": [
+      "欧拉玛=Ollama"
+    ],
+    "generate_raw": "打 开 欧 拉 玛 然 后 拉 取 模 型",
+    "cleaned": "打开欧拉玛然后拉取模型",
+    "with_hotwords": "打开Ollama然后拉取模型",
+    "changed": true,
+    "matches": [
+      {
+        "original": "欧拉玛",
+        "replacement": "Ollama",
+        "score": 1.0,
+        "start": 2,
+        "end": 5
+      }
+    ],
+    "expect_hit": true
+  },
+  {
+    "say": "今天天气不错我们出去走走吧",
+    "hotwords": [
+      "昆仑万象",
+      "智谱清言"
+    ],
+    "generate_raw": "今 天 天 气 不 错 我 们 出 去 走 走 吧",
+    "cleaned": "今天天气不错我们出去走走吧",
+    "with_hotwords": "今天天气不错我们出去走走吧",
+    "changed": false,
+    "matches": [],
+    "expect_hit": false
+  }
+]
