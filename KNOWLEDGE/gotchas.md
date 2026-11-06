@@ -211,7 +211,7 @@ staging（OCR 权重 / 语音模型 / CUDA 运行库）→ `verify_web_release.p
 | --- | --- |
 | 远程 | `https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git` |
 | 分支 | `main` |
-| 许可证 | MIT |
+| 许可证 | GPL v3 |
 | 首次提交 | 2026-11-06，159 个文件 / 26904 行 |
 | 约定 | 中文 Conventional Commits、UTF-8 无 BOM、仓库内 LF |
 

@@ -13,7 +13,7 @@ Windows 桌面应用，Python 3.14 + PySide6（QWebEngineView + QWebChannel）+ 
 | --- | --- |
 | 远程 | `https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git` |
 | 分支 | `main` |
-| 许可证 | MIT |
+| 许可证 | GPL v3 |
 
 ## 硬性约束
 

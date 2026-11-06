@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-QtWebEngine-41CD52?logo=qt&logoColor=white)](https://doc.qt.io/qtforpython/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white)](#环境要求)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey)](#许可证)
+[![License](https://img.shields.io/badge/License-GPLv3-blue)](#许可证)
 
 > **无障碍定位**：本项目为阅读障碍（Dyslexia）、低视力及弱视用户设计。
 > 核心思路是把「需要费力阅读的文字」转为「可以直接听的内容」，
@@ -282,7 +282,10 @@ test(settings): 增加页签动画三帧采样用例
 
 ## 许可证
 
-MIT License —— 详见 [`LICENSE`](LICENSE)。
+本项目采用 **GNU General Public License v3.0** —— 详见 [`LICENSE`](LICENSE)。
+
+这意味着你可以自由使用、修改和分发本软件，但**衍生作品也必须以 GPL v3 开源**。
+如需用于闭源商业场景，请联系作者协商其他授权方式。
 
 ### 第三方组件
 
@@ -296,3 +299,7 @@ MIT License —— 详见 [`LICENSE`](LICENSE)。
 - **HY-MT1.5**（翻译模型）— 见模型发布方的许可证
 
 模型权重不随本仓库分发，请自行获取并遵守其原始许可。
+
+---
+
+<sub>Copyright (C) 2026 ZhiHan1 · 本项目以 GPL v3 发布，欢迎提交 Issue 与 Pull Request。</sub>

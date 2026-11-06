@@ -158,7 +158,7 @@
 3. 每条结论要能落到 `文件:行号` 或实测数据，否则标注「待验证」。
 4. 本目录只放结论与方法，不放截图、日志、模型二进制。
 5. 仓库：`https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups`，
-   `main` 分支，MIT 许可。提交信息用中文 Conventional Commits，
+   `main` 分支，GPL v3 许可。提交信息用中文 Conventional Commits，
    编码约定见 KB-GOT-010 / KB-GOT-011。
 
 ## 五、仓库信息（速查）
@@ -167,7 +167,7 @@
 | --- | --- |
 | 远程 | `https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git` |
 | 分支 | `main` |
-| 许可证 | MIT（`LICENSE`） |
+| 许可证 | GPL v3（`LICENSE`） |
 | 面向文档 | `README.md`（功能/安装/开发约定）、`CHANGELOG.md`、`WEB_RELEASE.md`、`CONFIGURATION.md` |
 | 仓库政策 | `.gitignore`（排除模型与 `config.yaml`）、`.gitattributes`（统一 LF） |
 | 首次提交 | 2026-11-06 · 159 文件 · 26904 行 |

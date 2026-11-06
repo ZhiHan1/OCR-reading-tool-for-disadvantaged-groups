@@ -19,7 +19,7 @@
 
 # 仓库
 远程：https://github.com/ZhiHan1/OCR-reading-tool-for-disadvantaged-groups.git
-分支：main（主线）· 许可证 MIT
+分支：main（主线）· 许可证 GPL v3
 已建立 git 仓库，改动有回滚点，但仍建议重要改动前留备份并做反向验证。
 ⚠ 本机目录 D:\Project_File 归属旧 SID，git 需 safe.directory（已在全局配置）。
 ⚠ 访问 GitHub 需代理 127.0.0.1:7890（已配在本仓库 http.proxy 局部配置）。
