@@ -397,6 +397,153 @@ class WebApi(QObject):
         return {'ok': True, 'devices': devices,
                 'selected': str(self.config.get('asr', 'device_name', default='') or '')}
 
+    # ---- 个人词库（热词）----
+
+    def _hotword_payload(self, extra=None):
+        """热词相关动作的统一返回结构。"""
+        from core import hotword_learning
+
+        words = list(self.config.get('asr', 'hotwords', default=None) or [])
+        data = {
+            'ok': True,
+            'hotwords': [str(w) for w in words],
+            'candidates': hotword_learning.list_candidates(),
+            'threshold': float(self.config.get('asr', 'hotword_threshold', default=0.8) or 0.8),
+            'fuzzy': bool(self.config.get('asr', 'hotword_fuzzy', default=True)),
+        }
+        if extra:
+            data.update(extra)
+        return data
+
+    def do_hotwords(self, p):
+        """读取正式词表 + 候选池。"""
+        return self._hotword_payload()
+
+    def do_hotwords_add(self, p):
+        """批量导入词表（手动粘贴/文件内容）。"""
+        text = str(p.get('text') or '')
+        if not text.strip():
+            return {'ok': False, 'error': '内容为空'}
+        from core import hotword_learning
+
+        count, added = hotword_learning.merge_into_hotwords(text)
+        self.config.save()
+        from core.hotwords import reload_hotwords
+
+        reload_hotwords()
+        return self._hotword_payload({'added': count, 'entries': added,
+                                      'message': f'已新增 {count} 条' if count else '没有新增条目'})
+
+    def do_hotwords_save(self, p):
+        """整体保存词表（界面里编辑后保存）。"""
+        words = p.get('hotwords')
+        if not isinstance(words, list):
+            return {'ok': False, 'error': '词表格式不正确'}
+        cleaned = []
+        seen = set()
+        for w in words:
+            w = str(w).strip()
+            if not w or w in seen:
+                continue
+            seen.add(w)
+            cleaned.append(w)
+        self.config.set('asr', 'hotwords', value=cleaned)
+        self.config.save()
+        from core.hotwords import reload_hotwords
+
+        reload_hotwords()
+        return self._hotword_payload({'message': f'已保存 {len(cleaned)} 条'})
+
+    def do_hotwords_accept(self, p):
+        """确认候选：并入正式词表后从候选池移除。"""
+        rights = p.get('rights') or []
+        if isinstance(rights, str):
+            rights = [rights]
+        rights = [str(r).strip() for r in rights if str(r).strip()]
+        if not rights:
+            return {'ok': False, 'error': '未选择候选'}
+        from core import hotword_learning
+
+        current = [str(w) for w in (self.config.get('asr', 'hotwords', default=None) or [])]
+        known = set(current)
+        candidates = {str(c.get('right', '')): c for c in hotword_learning.list_candidates()}
+        added = []
+        for right in rights:
+            cand = candidates.get(right)
+            if cand is None:
+                continue
+            wrong = str(cand.get('wrong') or '').strip()
+            entry = f'{wrong}->{right}' if wrong else right
+            if entry in known:
+                continue
+            known.add(entry)
+            current.append(entry)
+            added.append(entry)
+        if added:
+            self.config.set('asr', 'hotwords', value=current)
+            self.config.save()
+            from core.hotwords import reload_hotwords
+
+            reload_hotwords()
+        hotword_learning.dismiss_candidates(rights)
+        return self._hotword_payload({'accepted': len(added),
+                                      'message': f'已并入 {len(added)} 条到正式词表'})
+
+    def do_hotwords_dismiss(self, p):
+        """拒绝候选：移出候选池并记录，之后不再出现。"""
+        rights = p.get('rights') or []
+        if isinstance(rights, str):
+            rights = [rights]
+        from core import hotword_learning
+
+        n = hotword_learning.dismiss_candidates(rights)
+        return self._hotword_payload({'message': f'已忽略 {n} 条'})
+
+    def do_hotwords_clear_candidates(self, p):
+        from core import hotword_learning
+
+        n = hotword_learning.clear_candidates()
+        return self._hotword_payload({'message': f'已清空 {n} 条候选'})
+
+    def do_hotwords_learn(self, p):
+        """从一次「识别原文 -> 用户确认文本」的修改中学习候选。
+
+        参数：raw（识别原文）、final（用户最终文本）。
+        只进候选池，不直接改词表。
+        """
+        raw = str(p.get('raw') or '')
+        final = str(p.get('final') or '')
+        from core import hotword_learning
+
+        pairs = hotword_learning.extract_edits(raw, final)
+        added = hotword_learning.add_candidates(pairs, source='confirm')
+        return self._hotword_payload({
+            'pairs': [{'wrong': w, 'right': r} for w, r in pairs],
+            'added': added,
+            'message': f'提取到 {len(pairs)} 处改动' if pairs else '没有可学习的改动',
+        })
+
+    def do_hotwords_export(self, p):
+        """导出词表文本到文件。"""
+        from core import hotword_learning
+
+        text = hotword_learning.export_hotwords()
+        if not text.strip():
+            return {'ok': False, 'error': '词表为空'}
+        path = self._save_text_file(text, 'hotwords.txt', '导出个人词库')
+        return {'ok': True, 'path': path}
+
+    def _save_text_file(self, text, default_name, title):
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getSaveFileName(self.win, title, default_name,
+                                              '文本文件 (*.txt);;所有文件 (*)')
+        if not path:
+            return ''
+        with open(path, 'wb') as fh:
+            fh.write(str(text).encode('utf-8'))
+        return path
+
     def do_asr_import_model(self, p):
         if self.win.voice.phase != 'idle':
             return {'ok': False, 'error': '请先停止语音输入，再导入模型'}

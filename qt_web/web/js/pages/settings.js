@@ -1029,7 +1029,124 @@
   }
 
   /* ============================================================
-     页签 6：主题
+     页签 6：个人词库
+     ============================================================ */
+  let hotwordCache = { hotwords: [], candidates: [] };
+
+  function renderHotwords() {
+    return (
+      C.subsec(
+        "📚",
+        "正式词表",
+        '<textarea class="ta" id="hw-list" style="height:150px" ' +
+          'placeholder="每行一条。写成「错词=正确词」可强制替换，例如：音机铜=阴极铜"></textarea>' +
+          '<div class="row mt-4">' +
+          C.btn("💾 保存词表", { tone: "primary", size: "sm", id: "hw-save" }) +
+          C.btn("📥 导入", { tone: "info", size: "sm", id: "hw-import" }) +
+          C.btn("📤 导出", { tone: "ghost", size: "sm", id: "hw-export" }) +
+          '<span style="flex:1"></span>' +
+          C.hintInline("", { id: "hw-msg" }) +
+          "</div>" +
+          '<div class="hint-inline" id="hw-count"></div>' +
+          C.hintInline("💡 两字词（如 TP1）建议写成「错误=正确」显式映射；三字以上才参与拼音模糊纠错", "margin-top:6px"),
+        "这些词在每次识别后自动纠错"
+      ) +
+      C.subsec(
+        "🧠",
+        "候选词（待确认）",
+        '<div id="hw-candidates"></div>',
+        "从你修改识别结果时自动学习，确认后才会并入正式词表"
+      )
+    );
+  }
+
+  function renderCandidateList(list) {
+    if (!list || !list.length) {
+      return '<div class="hint-inline">暂无候选。在语音页识别后修改结果并点「保存修改」，改动会自动出现在这里。</div>';
+    }
+    const rows = list.map(function (c) {
+      const wrong = c.wrong ? A.esc(c.wrong) + " → " : "";
+      const w = c.weight > 1 ? '<span class="hotkey-hint" style="margin-left:6px">×' + c.weight + "</span>" : "";
+      return (
+        '<div class="field" data-right="' + A.esc(c.right) + '">' +
+        '<span class="field-label">' + wrong + "<b>" + A.esc(c.right) + "</b>" + w + "</span>" +
+        '<div class="field-ctl">' +
+        C.btn("✅ 加入", { tone: "success", size: "sm", cls: "hw-accept" }) +
+        C.btn("✕ 忽略", { tone: "ghost", size: "sm", cls: "hw-dismiss" }) +
+        "</div></div>"
+      );
+    });
+    return rows.join("");
+  }
+
+  function refreshHotwords(root) {
+    return A.bridge.call("hotwords", {}).then(function (res) {
+      if (!res || !res.ok) return;
+      hotwordCache = res;
+      const listEl = A.qs("#hw-list", root);
+      if (listEl) listEl.value = (res.hotwords || []).join("\n");
+      const box = A.qs("#hw-candidates", root);
+      if (box) box.innerHTML = renderCandidateList(res.candidates);
+      bindCandidateButtons(box, root);
+      setText("#hw-count", "共 " + (res.hotwords || []).length + " 条");
+    });
+  }
+
+  function bindCandidateButtons(box, root) {
+    if (!box) return;
+    A.qsa(".hw-accept", box).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const right = btn.closest(".field").dataset.right;
+        A.bridge.call("hotwords_accept", { rights: [right] }).then(function (res) {
+          if (res && res.ok) setText("#hw-msg", res.message || "已加入");
+          refreshHotwords(root);
+        });
+      });
+    });
+    A.qsa(".hw-dismiss", box).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const right = btn.closest(".field").dataset.right;
+        A.bridge.call("hotwords_dismiss", { rights: [right] }).then(function (res) {
+          if (res && res.ok) setText("#hw-msg", res.message || "已忽略");
+          refreshHotwords(root);
+        });
+      });
+    });
+  }
+
+  function mountHotwords(root) {
+    refreshHotwords(root);
+
+    A.on(A.qs("#hw-save", root), "click", function () {
+      const listEl = A.qs("#hw-list", root);
+      const words = (listEl.value || "").split("\n")
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s; });
+      A.bridge.call("hotwords_save", { hotwords: words }).then(function (res) {
+        setText("#hw-msg", (res && res.message) || (res && res.error) || "保存失败");
+        refreshHotwords(root);
+      });
+    });
+
+    A.on(A.qs("#hw-import", root), "click", function () {
+      /* 导入即并入：把文本框内容和现有词表一起提交，由后端去重合并 */
+      const listEl = A.qs("#hw-list", root);
+      A.bridge.call("hotwords_add", { text: listEl.value }).then(function (res) {
+        setText("#hw-msg", (res && res.message) || (res && res.error) || "导入失败");
+        refreshHotwords(root);
+      });
+    });
+
+    A.on(A.qs("#hw-export", root), "click", function () {
+      A.bridge.call("hotwords_export", {}).then(function (res) {
+        if (res && res.ok) setText("#hw-msg", "已导出到 " + (res.path || ""));
+        else setText("#hw-msg", (res && res.error) || "导出失败");
+      });
+    });
+  }
+
+  /* ============================================================
+     页签 7：主题
      ============================================================ */
   function renderTheme() {
     const cur = A.theme.current();
@@ -1103,6 +1220,7 @@
     { key: "hotkey", label: "按键设置", render: renderHotkey, mount: mountHotkey },
     { key: "trans", label: "翻译设置", render: renderTrans, mount: mountTrans },
     { key: "recog", label: "识别设置", render: renderRecog, mount: mountRecog },
+    { key: "hotwords", label: "个人词库", render: renderHotwords, mount: mountHotwords },
     { key: "theme", label: "主题", render: renderTheme, mount: mountTheme },
   ];
 

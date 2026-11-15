@@ -67,3 +67,6 @@ desktop.ini
 *.pem
 .env
 .env.*
+
+# ---- 个人词库候选池（随机器，不进 git） ----
+models/asr/hotword_candidates.json

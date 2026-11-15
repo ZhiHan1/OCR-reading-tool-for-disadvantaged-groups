@@ -125,9 +125,10 @@
 
       const card3 = C.card(
         "识别结果",
-        "",
-        '<textarea class="ta" id="asr-output" readonly style="height:96px" placeholder="识别结果将显示在这里…"></textarea>' +
+        "改完后点「保存修改」，系统会从中学习你的个人词库",
+        '<textarea class="ta" id="asr-output" style="height:96px" placeholder="识别结果将显示在这里，可直接修改…"></textarea>' +
           '<div class="row mt-4">' +
+          C.btn("💾 保存修改", { tone: "primary", size: "sm", id: "asr-save-btn" }) +
           C.btn("📋 复制结果", { tone: "success", size: "sm", id: "asr-copy-btn" }) +
           C.btn("🗑️ 清空", { tone: "warn", size: "sm", id: "asr-clear-btn" }) +
           "</div>"
@@ -140,6 +141,9 @@
       const talkBtn = A.qs("#talk-btn", root);
       const talkStatus = A.qs("#talk-status", root);
        const output = A.qs("#asr-output", root);
+       const saveBtn = A.qs("#asr-save-btn", root);
+       /* 最近一次模型原始输出；用户编辑后用它做 diff 学习 */
+       let lastRaw = "";
        const modelStatus = A.qs("#asr-model-status", root);
        const loadBtn = A.qs("#asr-load", root);
        const modelSelect = A.qs('#asr-model', root);
@@ -409,8 +413,34 @@
         if (!output || msg.text == null) return;
         output.value = output.value ? output.value + "\n" + msg.text : msg.text;
         output.scrollTop = output.scrollHeight;
+        /* 记住模型原始输出，供「保存修改」比对学习。
+           只用最近一次结果，避免多段累积后 diff 失准。 */
+        lastRaw = msg.text;
         if (!voiceState.busy) setTalkStatus('识别完成', false);
       });
+
+      /* 保存修改：把「识别原文 → 用户最终文本」交给后端提取改动，
+         只进候选池，不直接进正式词表（需在词库页确认）。 */
+      if (saveBtn) {
+        A.on(saveBtn, 'click', function () {
+          if (!output || !lastRaw) { setTalkStatus('还没有可学习的识别结果', false); return; }
+          const final = output.value.trim();
+          if (!final || final === lastRaw) { setTalkStatus('内容未修改，无需学习', false); return; }
+          A.bridge.call('hotwords_learn', { raw: lastRaw, final: final })
+            .then(function (res) {
+              if (!res || !res.ok) { setTalkStatus((res && res.error) || '学习失败', false); return; }
+              const n = (res.pairs || []).length;
+              if (n) {
+                setTalkStatus('已提取 ' + n + ' 处改动，去「词库」页确认后生效', false);
+                if (A.toast) A.toast('个人词库候选 +' + n);
+              } else {
+                setTalkStatus('没有可学习的改动（可能只是补标点或改措辞）', false);
+              }
+              lastRaw = final;
+            })
+            .catch(function (e) { setTalkStatus('学习失败：' + e, false); });
+        });
+      }
 
       setTalkStatus("就绪 · 松开自动识别", false);
       syncModeUI();
