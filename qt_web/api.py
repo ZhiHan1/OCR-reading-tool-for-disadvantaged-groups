@@ -109,7 +109,28 @@ class WebApi(QObject):
             return {'ok':False,'error':str(exc)}
 
     def do_scan_model_folders(self, p):
-        return self._scan_model_folders()
+        """「重新扫描」按钮的入口。
+
+        必须**同步把结果带回去**：模型发现要求文件稳定两轮才登记
+        （`ModelDiscovery.seen`），只扫一轮通常什么都找不到。再加推送是
+        按签名去重（`_model_scan_snapshot`），列表没变时前端收不到事件，
+        用户点下去就是「没反应」。
+
+        这里连扫两轮（第二轮必然登记），并在返回体里带上最新的模型列表，
+        前端拿到响应就地刷新下拉，不依赖推送。
+        """
+        try:
+            self._model_manager().scan()
+            self._model_manager().scan()
+            state = self._models_state()
+            self._push({'type': 'model-folders-changed',
+                        'asr': self.do_asr_models({}), 'models': state})
+            count = len(state.get('local') or [])
+            print(f'[模型扫描] 手动重扫完成，本地模型 {count} 个')
+            return {'ok': True, 'models': state, 'count': count}
+        except Exception as exc:  # noqa: BLE001
+            print(f'[模型扫描] 手动重扫失败: {exc}')
+            return {'ok': False, 'error': str(exc)}
 
     def _check_model_health(self):
         """启动后检查外置模型目录，缺什么就推给前端提示（不阻塞启动）。

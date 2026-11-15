@@ -27,7 +27,7 @@
 | 要不要把模型量化成 INT8 ONNX、能省多少、会丢什么 | `asr.md` §8（KB-ASR-008/009，本机实测） |
 | 识别错了专有名词，怎么加/排查热词 | `asr.md` §9.8（KB-ASR-010）+ `core/hotwords.py` |
 | 业界（微信/豆包/输入法）用什么方案、我们差在哪 | `asr.md` §9（KB-ASR-007，外部调研） |
-| 翻译怎么调参、为什么翻错、能不能用 GPU | `translation.md`（KB-TR-001~007） |
+| 翻译怎么调参、为什么翻错、能不能用 GPU | `translation.md`（KB-TR-001~009） |
 | 内存占用、启动速度、线程数 | `performance.md` |
 | 模型放哪个文件夹、为什么不进安装包、换盘符会不会失效 | `gotchas.md` §9（KB-GOT-012） |
 | 改了代码/测试「没生效」、反向验证结果自相矛盾 | `gotchas.md` §6.2.1（KB-GOT-013，先清 `__pycache__`） |
@@ -149,6 +149,8 @@
 | KB-TR-005 | 术语固定错误清单（镀锡→镀镍等）；术语干预方案，**用户已决定暂缓** | translation.md §6 |
 | KB-TR-006 | GPU 加速：本机为纯 CPU 版；官方无 CUDA wheel，仅 Vulkan；**用户已决定后续再议** | translation.md §7 |
 | KB-TR-007 | 本地模型下拉出现「不存在的模型」：`_load_config` 文件缺失仍入列；`scan()` 只加不删所以记录一直不动；修法三处（丢弃+写回+运行期兜底）；测试双补丁陷阱 | translation.md §9 |
+| KB-TR-008 | **打包后翻译失效**：`scan()` 新增模型不设 active + 记录表空时不做首次发现；`translation_usable()` 返回 False 导致静默失效；排查先看 `models_config.json` | translation.md §10 |
+| KB-TR-009 | 翻译设置页模型操作区：「移除记录」已删、打开文件夹/重新扫描移到禁用右边；重新扫描曾点了没效果的两个原因；探针必须先切 `data-tab="trans"` | translation.md §11 |
 
 ### GOT · 坑与取舍
 

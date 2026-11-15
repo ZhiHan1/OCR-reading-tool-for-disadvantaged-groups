@@ -135,8 +135,8 @@ class TestAssetVersionBumped(unittest.TestCase):
         version = set(re.findall(r"\?v=([0-9a-z]+)", html)).pop()
         self.assertGreaterEqual(
             version,
-            "20261115d",
-            "改了 voice.js 必须 bump 版本号（当前期望 >= 20261115d）",
+            "20261115e",
+            "改了任何 JS/CSS 必须 bump 版本号（当前期望 >= 20261115e）",
         )
 
 

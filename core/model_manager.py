@@ -34,7 +34,23 @@ class ModelManager:
         self._load_config()
         self.discovery = ModelDiscovery(model_drop_root('translation'),os.path.join(self.models_dir,'scan_hidden.json'),app_root())
 
+        # 记录表是空的（首次运行 / 失效记录刚被清理）就立刻做首次发现。
+        # ModelDiscovery 要求文件稳定两轮才登记，只靠定时器要等 3~6 秒；
+        # 连续跑两轮即可当场把 `模型/翻译/` 里已有的 GGUF 登记下来并自动启用，
+        # 否则这段时间里「翻译可用」为假，自动翻译会静默失效。
+        if not self.models:
+            self.scan()
+            self.scan()
+
     def scan(self):
+        """扫描投放目录，登记新出现的 GGUF。
+
+        新增模型时若当前没有活动模型，**自动启用第一个**——与 add_model()
+        的既有约定一致。少了这一步的后果（2026-11-15 打包版实测）：
+        `模型/翻译/` 里有 GGUF、记录表却是空的（首次运行或失效记录被清理后），
+        scan() 会把模型加进列表但 active 仍是 None，`translation_usable()`
+        判定「翻译不可用」，自动翻译静默失效——用户看到的就是「打包后翻译坏了」。
+        """
         known={path_key(m['path']) for m in self.models.values()}
         added=[]
         for path in self.discovery.candidates('translation'):
@@ -43,7 +59,14 @@ class ModelManager:
             if mid in self.models:mid += '_'+self.discovery.unique_id(path)
             self.models[mid]=dict(name=path.stem,path=str(path),file_name=path.name,enabled=False,type='gguf')
             known.add(path_key(path));added.append(mid)
-        if added:self._save_config()
+        if added:
+            if not self.active_model:
+                first=added[0]
+                self.models[first]['enabled']=True
+                self.active_model=first
+                self.active_model_path=self.models[first]['path']
+                print(f"[模型管理器] 扫描后自动启用第一个模型: {first}")
+            self._save_config()
         return added
 
     def _load_config(self):

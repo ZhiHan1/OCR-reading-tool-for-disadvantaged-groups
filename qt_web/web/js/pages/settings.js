@@ -494,13 +494,13 @@
 
     const localPanel =
       '<div id="model-panel-local">' +
-      '<div class="row" style="margin-bottom:12px">' + C.btn('打开翻译模型文件夹',{tone:'ghost',size:'sm',id:'translation-open-folder'}) + C.btn('重新扫描',{tone:'ghost',size:'sm',id:'translation-scan-folder'}) + '</div>' +
       '<div class="muted" style="margin-bottom:12px">投放位置：模型/翻译/。放入 GGUF 文件后自动加入列表，选择并启用即可。</div>' +
       C.field("本地模型", '<select class="select" id="local-model" style="flex:1">' + localOpts + "</select>") +
       '<div class="row">' +
       C.btn("➕ 添加模型", { tone: "success", size: "sm", id: "local-add" }) +
       C.btn("❌ 禁用", { tone: "warn", size: "sm", id: "local-disable", disabled: true }) +
-      C.btn("移除记录", { tone: "warn", size: "sm", id: "local-delete", disabled: true }) +
+      C.btn("📂 打开翻译模型文件夹", { tone: "ghost", size: "sm", id: "translation-open-folder" }) +
+      C.btn("🔄 重新扫描", { tone: "ghost", size: "sm", id: "translation-scan-folder" }) +
       "</div>" +
       C.hintInline("", { id: "local-hint", style: "margin-top:10px" }) +
       "</div>";
@@ -561,9 +561,40 @@
     const onlineSel = A.qs("#online-model", root);
 
     let nav = "local";
-    A.on(A.qs('#translation-open-folder',root),'click',function () { A.bridge.call('open_model_folder',{kind:'translation'}); });
-    A.on(A.qs('#translation-scan-folder',root),'click',function () { A.bridge.call('scan_model_folders',{}); });
-    A.bridge.on('model-folders-changed',function (msg) {
+
+    A.on(A.qs("#translation-open-folder", root), "click", function () {
+      A.bridge.call("open_model_folder", { kind: "translation" }).then(function (res) {
+        if (res && res.ok === false) setText("#local-hint", "❌ " + (res.error || "打开文件夹失败"));
+      });
+    });
+
+    /* 重新扫描：后端同步连扫两轮并把最新列表带回来。
+       以前只 call 不处理响应，而推送按签名去重、列表没变就不发，
+       用户点下去完全没有反馈，看起来就是「点了没效果」。 */
+    A.on(A.qs("#translation-scan-folder", root), "click", function () {
+      const btn = A.qs("#translation-scan-folder", root);
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true;
+      setText("#local-hint", "正在扫描 模型/翻译/ …");
+      A.bridge.call("scan_model_folders", {}).then(function (res) {
+        if (btn) btn.disabled = false;
+        if (!res || res.ok === false) {
+          setText("#local-hint", "❌ 扫描失败：" + ((res && res.error) || "未知错误"));
+          return;
+        }
+        if (res.models) A.state.models = res.models;
+        refreshModelLists();
+        const n = res.count || 0;
+        setText("#local-hint", n
+          ? "✅ 扫描完成，共 " + n + " 个本地模型"
+          : "⚠️ 扫描完成，但 模型/翻译/ 里没有找到 GGUF 文件");
+      }).catch(function (e) {
+        if (btn) btn.disabled = false;
+        setText("#local-hint", "❌ 扫描失败：" + e);
+      });
+    });
+
+    A.bridge.on('model-folders-changed', function (msg) {
       if (!localSel.isConnected) return;
       A.state.models = msg.models;
       refreshModelLists();
@@ -587,11 +618,9 @@
       })[0];
 
       /* 与 tkinter 版 _sync_model_buttons_by_display 一致：
-         删除 → 只要有选中项就能点
          禁用 → 只有选中的正好是「当前启用的模型」才能点
                 （未启用的模型本来就没启用，禁用是空操作） */
       A.qs("#local-disable", root).disabled = !cur || !cur.active;
-      A.qs("#local-delete", root).disabled = !hasLocal;
       A.qs("#online-delete", root).disabled = !hasOnline;
       A.qs("#online-test", root).disabled = !hasOnline;
       A.qs("#online-copy", root).disabled = true;
@@ -723,23 +752,9 @@
       });
     });
 
-    A.on(A.qs("#local-delete", root), "click", function () {
-      const delBtn = A.qs("#local-delete", root);
-      const targetId = localSel.value;
-      if (!targetId || delBtn.disabled) return;
-      /* 立刻禁用，避免用户连点产生一串「模型不存在」的请求 */
-      delBtn.disabled = true;
-      setText("#local-hint", "正在移除记录…");
-      A.bridge.call("remove_local_model", { id: targetId }).then(function (res) {
-        if (res && res.ok) {
-          setText("#local-hint", "已移除记录，文件保留：" + targetId);
-          reloadModels();
-        } else {
-          setText("#local-hint", "❌ " + ((res && res.error) || "删除失败"));
-          syncButtons();
-        }
-      });
-    });
+    /* 「移除记录」按钮已按用户要求下线（2026-11-15）：失效记录由扫描自动清理，
+       不再需要手动移除。删掉按钮后绑定的 A.qs 会拿到 null，
+       A.on(null) 会抛异常把后面的绑定全吞掉 —— 所以整段一起删干净。 */
 
     A.on(A.qs("#local-add", root), "click", function () {
       openAddLocalModel(reloadModels);
