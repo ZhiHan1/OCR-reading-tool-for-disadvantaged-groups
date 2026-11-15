@@ -125,9 +125,10 @@
 
       const card3 = C.card(
         "识别结果",
-        "改完后点「保存修改」，系统会从中学习你的个人词库",
-        '<textarea class="ta" id="asr-output" style="height:96px" placeholder="识别结果将显示在这里，可直接修改…"></textarea>' +
+        "结果框默认只读，避免误触改字；需要纠正错误时点「✏️ 编辑」",
+        '<textarea class="ta" id="asr-output" style="height:96px" readonly placeholder="识别结果将显示在这里，只能复制…"></textarea>' +
           '<div class="row mt-4">' +
+          C.btn("✏️ 编辑", { tone: "warn", size: "sm", id: "asr-edit-btn" }) +
           C.btn("💾 保存修改", { tone: "primary", size: "sm", id: "asr-save-btn" }) +
           C.btn("📋 复制结果", { tone: "success", size: "sm", id: "asr-copy-btn" }) +
           C.btn("🗑️ 清空", { tone: "warn", size: "sm", id: "asr-clear-btn" }) +
@@ -140,10 +141,11 @@
     mount: function (root) {
       const talkBtn = A.qs("#talk-btn", root);
       const talkStatus = A.qs("#talk-status", root);
-       const output = A.qs("#asr-output", root);
-       const saveBtn = A.qs("#asr-save-btn", root);
-       /* 最近一次模型原始输出；用户编辑后用它做 diff 学习 */
-       let lastRaw = "";
+      const output = A.qs("#asr-output", root);
+      const saveBtn = A.qs("#asr-save-btn", root);
+      const editBtn = A.qs("#asr-edit-btn", root);
+      /* 最近一次模型原始输出；用户编辑后用它做 diff 学习 */
+      let lastRaw = "";
        const modelStatus = A.qs("#asr-model-status", root);
        const loadBtn = A.qs("#asr-load", root);
        const modelSelect = A.qs('#asr-model', root);
@@ -369,6 +371,33 @@
        });
 
       /* ---- 结果操作 ---- */
+
+      /* 结果框默认只读：识别结果轻易不该被误触改掉。
+         需要纠正错误（并让系统学习词库）时点「编辑」临时解锁。 */
+      function setEditing(on, quiet) {
+        if (!output) return;
+        output.readOnly = !on;
+        output.classList.toggle('editing', !!on);
+        if (editBtn) {
+          editBtn.textContent = on ? "🔒 完成编辑" : "✏️ 编辑";
+          editBtn.dataset.editing = on ? "1" : "";
+        }
+        if (quiet) return;
+        if (on) {
+          output.focus();
+          setTalkStatus("编辑中 · 改完点「保存修改」学习词库");
+        } else {
+          setTalkStatus("已锁定 · 结果框只读，可复制");
+        }
+      }
+      if (editBtn) {
+        A.on(editBtn, 'click', function () {
+          setEditing(editBtn.dataset.editing !== "1");
+        });
+      }
+      /* 初始为只读（静默，不覆盖页面下方的「就绪」提示） */
+      setEditing(false, true);
+
       A.on(A.qs("#asr-copy-btn", root), "click", function () {
         if (!output || !output.value) return;
         /* QWebEngine 里 navigator.clipboard 常被权限拦掉，统一走 Python 剪贴板 */
@@ -411,12 +440,17 @@
          连续按住说话会累积成一段历史，这里保持一致，不要覆盖。 */
       A.bridge.on("asr-result", function (msg) {
         if (!output || msg.text == null) return;
+        /* 正在编辑说明用户还没保存改动：此时不能动 lastRaw，
+           否则 diff 基准被冲掉、已改的词学不到。内容仍然追加（保持旧 UI 行为）。 */
+        const editing = output.readOnly === false;
         output.value = output.value ? output.value + "\n" + msg.text : msg.text;
         output.scrollTop = output.scrollHeight;
         /* 记住模型原始输出，供「保存修改」比对学习。
            只用最近一次结果，避免多段累积后 diff 失准。 */
-        lastRaw = msg.text;
-        if (!voiceState.busy) setTalkStatus('识别完成', false);
+        if (!editing) lastRaw = msg.text;
+        if (!voiceState.busy) {
+          setTalkStatus(editing ? '识别完成 · 已追加（编辑中，保存修改仍按上次原文比对）' : '识别完成', false);
+        }
       });
 
       /* 保存修改：把「识别原文 → 用户最终文本」交给后端提取改动，
@@ -425,7 +459,14 @@
         A.on(saveBtn, 'click', function () {
           if (!output || !lastRaw) { setTalkStatus('还没有可学习的识别结果', false); return; }
           const final = output.value.trim();
-          if (!final || final === lastRaw) { setTalkStatus('内容未修改，无需学习', false); return; }
+          if (!final || final === lastRaw) {
+            /* 只读状态下没改过是正常情况，顺手引导去编辑，而不是干说「未修改」 */
+            setTalkStatus(
+              output.readOnly ? '内容未修改 · 如需纠正请先点「✏️ 编辑」' : '内容未修改，无需学习',
+              false
+            );
+            return;
+          }
           A.bridge.call('hotwords_learn', { raw: lastRaw, final: final })
             .then(function (res) {
               if (!res || !res.ok) { setTalkStatus((res && res.error) || '学习失败', false); return; }

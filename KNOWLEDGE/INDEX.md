@@ -78,6 +78,7 @@
 | KB-WEB-007 | 版本号 `?v=` 与缓存 | frontend.md §8 |
 | KB-WEB-008 | 文本可选性：只有文本框可复制（`user-select` 规则与例外） | frontend.md §10 |
 | KB-WEB-009 | 设置页向左切换「闪旧页」：轨道按阅读顺序铺、视口只由 `translateX` 控制 | frontend.md §7 |
+| KB-WEB-010 | 语音识别结果框默认只读 + 「编辑」临时解锁；编辑中不能更新 diff 基准；**写 DOM 探针的四个坑**（`A` 非全局、`router.go` 异步、`loadFinished` 会错过、同一同步块连点两次） | frontend.md §11 |
 
 ### API · 后端接口
 

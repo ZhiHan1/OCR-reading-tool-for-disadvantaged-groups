@@ -148,6 +148,7 @@ QWebEngine 对本地文件同样有缓存，**不改版本号 = 用户看到的�
 | 麦克风下拉在「模型」组首行 | `pages/voice.js` + `api.py::_input_devices` | 启动时枚举一次并缓存；「刷新」再次枚举；空值 = 跟随系统默认 |
 | 配置管理常驻设置页底部 | `pages/settings.js` | 独立 `card`，`cls: 'config-footer enter-up'`，只在该页渲染，切标签不销毁 |
 | 快捷键录制期间暂停全局热键 | `keys.js` + `main.py::pause_hotkeys` | 避免按下的键被系统热键抢走 |
+| 语音识别结果框**默认只读**，点「✏️ 编辑」才可改 | `pages/voice.js::setEditing` | 见 §11（KB-WEB-010） |
 
 ## 10. 文本可选性：只有文本框可复制（KB-WEB-008）
 
@@ -179,3 +180,52 @@ body .selectable { -webkit-user-select: text; -moz-user-select: text; user-selec
   不要放宽 `body *`。
 - 验证方法：`getComputedStyle(el).userSelect` 应为 `none` / `text`；
   再对 6 个页面全量扫描，`user-select:text` 的元素必须只有 `input` / `textarea`。
+
+## 11. 语音识别结果框默认只读（KB-WEB-010）
+
+**需求**（2026-11-15）：用户反馈语音输入页的识别结果框不该能编辑，只能复制。
+
+**但不能直接改成永久只读**：该框可编辑是为了配合「保存修改」——它对比
+「模型原文」与「用户改后的文本」提取差异，写进个人词库候选
+（`hotwords_learn`）。永久只读会丢掉这个学习能力。
+
+**方案：默认只读 + 「✏️ 编辑」按钮临时解锁。**
+
+| 状态 | `readOnly` | 光标 | 类名 | 按钮文案 |
+| --- | --- | --- | --- | --- |
+| 默认 | `true` | `default` | `ta` | ✏️ 编辑 |
+| 编辑中 | `false` | `text` | `ta editing` | 🔒 完成编辑 |
+
+实现要点：
+
+1. `<textarea readonly>` 写在 HTML 里，JS 初始化**必须静默**
+   （`setEditing(false, true)`），否则会覆盖页面下方的「就绪 · 松开自动识别」。
+2. 编辑中收到新的识别结果时，**不要更新 `lastRaw`**（diff 基准），
+   否则用户已做的纠错被冲掉、学不到。追加内容的行为保持不变。
+3. 只读状态下点「保存修改」，提示引导去点「编辑」，而不是干说「未修改」。
+4. 复制不受影响：复制走 `copy_text`（Python 剪贴板），不依赖可编辑。
+
+守门测试：`tests/test_voice_output_readonly.py`（11 项）。
+真实 GUI 探针：`tools/probe_voice_readonly.py`。
+
+### 11.1 写前端 DOM 探针脚本的四个坑（实测踩过）
+
+排查这个需求时，探针脚本连续失败多次，根因都不在业务代码。写同类脚本前先看这四条：
+
+| 坑 | 现象 | 正确做法 |
+| --- | --- | --- |
+| **`A` 不是全局变量** | JS 里 `A.router` 报未定义或返回空 | 全局只有 `window.APP`，`A` 是各模块内部的局部别名（`core/namespace.js`）。JS 开头写 `const A = window.APP;`——`tools/smoke_gui.py` 就是这么做的 |
+| **`router.go()` 异步提交** | 导航后立刻查 DOM 拿到旧页面 | 传 `{animate:false}` + `router.refresh()`，且**导航与断言分两次 `runJavaScript`**（KB-PERF-009） |
+| **`loadFinished` 会错过** | 连信号后回调永不触发 | `WebMainWindow` 在**构造函数里**就 `load()` 了，等我们连信号时加载早已开始。改成轮询 `window.APP.router` 是否存在 |
+| **同一同步块里连点两次** | 读不到中间态（class 没变） | 每次点击单独一次 `runJavaScript`，中间 `processEvents()` + 短 sleep |
+
+另外两条通用约定：
+
+- **返回值统一 `JSON.stringify` 包一层**。直接 `return {a:1}` 在 WebChannel 下
+  可能拿到 `null`，看不出是 JS 报错还是序列化失败。
+- 用 `processEvents()` 同步等回调（沿用 `tools/smoke_gui.py` 的写法），
+  比嵌套 `QTimer` 回调链好调试。
+
+> ⚠️ 教训：探针失败时**先怀疑探针本身**，不要急着改业务代码。
+> 这次业务代码一次就写对了（`readOnly` / `editing` 类 / 按钮文案全对），
+> 是探针的写法问题浪费了时间。

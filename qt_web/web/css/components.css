@@ -168,4 +168,8 @@
     background: var(--input-bg); outline: none; transition: border-color .15s;
   }
   textarea.ta:focus { border-color: var(--cyan); background: var(--focus-bg); }
-  textarea.ta[readonly] { color: var(--t2); }
+  /* 只读态：颜色变淡 + 光标为默认箭头，一眼看出「不可改」；
+     需要改时点「编辑」解锁，`.editing` 恢复成普通输入框的样子。 */
+  textarea.ta[readonly] { color: var(--t2); cursor: default; }
+  textarea.ta[readonly]:focus { border-color: var(--line); background: var(--input-bg); }
+  textarea.ta.editing { border-color: var(--cyan); background: var(--focus-bg); }
