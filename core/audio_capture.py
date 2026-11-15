@@ -43,14 +43,24 @@ _HOSTAPI_RANK = {'MME': 0, 'Windows DirectSound': 1, 'Windows WASAPI': 2, 'Windo
 
 
 def input_devices():
-    """列出可用麦克风（只列端口，不打开设备）。
+    """列出 Windows 判定为**在线**的麦克风。
 
-    返回 [{'name': ..., 'channels': ..., 'samplerate': ..., 'hostapi': ...}]，
-    保持 sounddevice 的枚举顺序（第一项通常是系统默认输入）。
+    判据与 Windows「设置 → 系统 → 声音」完全同源：
+    读 Core Audio 的 `IMMDevice::GetState()`（见 `core.audio_endpoints`），
+    只保留 `DEVICE_STATE_ACTIVE` 的采集设备，
+    排除「已禁用 / 不存在 / 未插入」——那些正是用户看到的
+    「列出来的麦克风大多没在线」。
 
-    同一支麦克风在 MME / DirectSound / WASAPI / WDM-KS 下会各出现一次，
-    MME 的名字还会被截断成 31 字符。这里按名字归并：优先保留 MME 的原始名
-    （与 Windows 设置里显示的一致），没有时取最短、最靠前的名字。
+    **不做音频探测**：不打开设备试录，只查状态（毫秒级，无副作用）。
+    虚拟声卡若在 Windows 里是「在线」，这里也会列出来——那是系统的
+    真实判定，不做额外猜测。
+
+    降级：Windows 状态查询失败（非 Windows / COM 异常）时不过滤，
+    退回 sounddevice 的原始列表，绝不清空。
+
+    返回 [{'name', 'channels', 'samplerate', 'hostapi', 'index'}]，
+    保持 sounddevice 的枚举顺序。
+    同名设备按 _HOSTAPI_RANK 归并：优先 MME 的原始名（与 Windows 设置一致）。
     """
     if not is_available():
         return []
@@ -60,6 +70,15 @@ def input_devices():
     except Exception as exc:  # noqa: BLE001 - 音频后端异常时降级为空列表
         print(f'[录音] 设备枚举失败: {exc}')
         return []
+
+    # ---- 第一层：Windows 原生状态 ----
+    try:
+        from core.audio_endpoints import active_capture_names
+
+        online = active_capture_names()
+    except Exception:  # noqa: BLE001
+        online = None
+
     groups = []
     for index, device in enumerate(devices):
         channels = int(device.get('max_input_channels') or 0)
@@ -80,14 +99,45 @@ def input_devices():
             group['full'] = max(group['full'], name, key=len)
         group['entries'].append({'index': index, 'name': name, 'channels': channels,
                                  'samplerate': samplerate, 'hostapi': hostapi})
+
     result = []
     for group in groups:
         entries = group['entries']
-        preferred = next((e for e in entries if e['hostapi'] == 'MME'), entries[0])
+        preferred = next((e for e in entries if e['hostapi'] == 'MME'),
+                         next((e for e in entries if e['hostapi'] == 'Windows WASAPI'), entries[0]))
+
+        # Windows 说不在线（已禁用 / 不存在 / 未插入）的直接丢。
+        # `online is None` 表示查不到（非 Windows / COM 异常），此时不过滤。
+        if online is not None and not _windows_says_online(group['full'], entries, online):
+            continue
+
         result.append({'name': group['full'], 'channels': preferred['channels'],
                        'samplerate': preferred['samplerate'], 'hostapi': preferred['hostapi'],
                        'index': preferred['index']})
     return result
+
+
+def _windows_says_online(group_name: str, entries, online: dict) -> bool:
+    """组内任一别名被 Windows 判为在线，就算这支麦克风在线。
+
+    Windows 的友好名和 PortAudio 的名字常有出入，例如：
+        Windows: 麦克风 (HECATE G2无线版)
+        MME 截断: 麦克(?  (31 字符上限)
+        WASAPI:   麦克风 (HECATE G2无线版)
+    所以按「前缀互相包含」宽松匹配。
+    """
+    names = {group_name} | {e['name'] for e in entries}
+    for candidate in names:
+        if not candidate:
+            continue
+        for online_name in online:
+            if not online_name:
+                continue
+            if candidate == online_name:
+                return True
+            if candidate.startswith(online_name) or online_name.startswith(candidate):
+                return True
+    return False
 
 
 def find_input_device(name):

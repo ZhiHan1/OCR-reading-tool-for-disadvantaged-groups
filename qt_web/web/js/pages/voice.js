@@ -84,10 +84,10 @@
         '</select>' +
         C.btn("刷新", { tone: "ghost", size: "sm", id: "asr-device-refresh" }) +
         '<span class="hint-inline" id="asr-device-status">' +
-        A.esc((a.devices || []).length ? '共 ' + a.devices.length + ' 个输入设备' : '未检测到可用麦克风') +
+        A.esc((a.devices || []).length ? '共 ' + a.devices.length + ' 个在线设备' : '未检测到在线麦克风') +
         '</span>' +
         '</div>' +
-        '<div class="mode-caption">启动软件时自动列出所有麦克风；插拔设备后点「刷新」。留空则跟随 Windows 默认输入。</div>' +
+        '<div class="mode-caption">只列出 Windows 判定为「在线」的麦克风（与系统设置一致）；插拔设备后点「刷新」。留空则跟随 Windows 默认输入。</div>' +
         '<div class="model-row">' +
         '<span class="model-label">识别模型</span>' +
         '<select class="select" id="asr-model">' + (models.length ? optionList(models, a.local_model) : '<option value="">请导入本地模型目录</option>') + '</select>' +

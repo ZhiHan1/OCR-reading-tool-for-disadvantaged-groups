@@ -640,16 +640,77 @@ BFe10-1-1  <->  BFe30-1-1    只差一个数字，被判为"听错"而互相误�
 
 ```python
 # core/audio_capture.py::input_devices()
-sd.query_hostapis(); sd.query_devices()   # 只枚举，不打开设备
+sd.query_hostapis(); sd.query_devices()      # 枚举端口
+core.audio_endpoints.active_capture_names()  # Windows 判定哪些在线
 ```
 
 Windows 上同一支麦克风会出现在 **MME / Windows DirectSound / Windows WASAPI /
-Windows WDM-KS** 四个 host API 里，本机实测 55 个端口 → 归并后 **15 个设备**。
+Windows WDM-KS** 四个 host API 里，本机实测 55 个端口。
 
 - MME 的设备名会被截断到 31 字符（如 `CABLE Output (VB-Audio Virtual`），
   所以用「前缀互为包含」判断是否同一支设备；
 - 显示名优先取完整名，避免把截断名写进配置；
 - 归并后保留的 `index` 是 MME 的原生端口（与系统默认列表一致）。
+
+#### 只列「在线」设备（用户反馈的问题）
+
+**现象**：下拉框里一堆麦克风，选了很多都录不到声音。
+
+**根因**：`sd.query_devices()` **只枚举端口，不打开设备**。端口注册项
+即使设备已拔出 / 被禁用也还在。实测本机归并后 15 个设备中：
+
+| Windows 状态 | 数量 | 例子 |
+|---|---|---|
+| 在线 ACTIVE | 6 | `麦克风 (HECATE G2无线版)` |
+| 已禁用 DISABLED | 1 | `内部 AUX 插座 (Steam Streaming Speakers)` |
+| 不存在 NOTPRESENT | 3 | `麦克风 (HECATE G2无线版 HEADSET)`（已拔出） |
+
+**修法**：`core/audio_endpoints.py` 用 ctypes 调 Core Audio 的
+`IMMDevice::GetState()`——**与「设置 → 系统 → 声音」同源**，
+只保留 `DEVICE_STATE_ACTIVE` 的采集设备。
+
+**不做音频探测**：不打开设备试录。理由：
+
+1. 打开设备有副作用（部分声卡会抢占用、WASAPI 需要初始化）；
+2. 判据不可靠——实测 MME 上虚拟声卡也能返回非零噪声（rms≈1.5e-5），
+   而真实麦克风安静时也可能接近 0；
+3. 用户的选择是「按 Windows 的判断来」，系统说在线就是在线的。
+
+**状态位（`mmdeviceapi.h`）**：
+
+| 值 | 含义 |
+|---|---|
+| `0x1` | ACTIVE 在线 |
+| `0x2` | DISABLED 已禁用 |
+| `0x4` | NOTPRESENT 不存在（设备已拔出） |
+| `0x8` | UNPLUGGED 未插入 |
+
+#### COM 调用的三个坑（都实测踩过）
+
+**坑 1：vtable 索引错一位，状态永远是 0。**
+
+```
+IMMDevice: 0=QueryInterface 1=AddRef 2=Release
+           3=Activate 4=OpenPropertyStore 5=GetId 6=GetState
+```
+
+用 5（`GetId`）调 `GetState` 不会报错，只是返回 0——表现为「所有设备状态未知」，
+比崩溃更难发现。
+
+**坑 2：`EnumAudioEndpoints` 第一个参数 0=扬声器、1=麦克风。**
+
+传 0 会拿到 40 个扬声器（`扬声器 (High Definition Audio Device)`、
+`NVIDIA Output` 等），一个麦克风都没有。
+
+**坑 3：`OpenPropertyStore` 的参数必须写 `DWORD`。**
+
+写成 `POINTER(c_void_p)` 会报 `OSError: 参数错误`。
+
+#### 降级
+
+`active_capture_names()` 返回 `None` 表示「查不到」（非 Windows / COM 异常），
+此时 `input_devices()` **不过滤**，退回原始列表。
+绝不能把 `None` 当成「没有设备」——那会让用户在 COM 出问题时彻底选不到麦克风。
 
 ### 10.3 生命周期
 
