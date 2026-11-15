@@ -19,7 +19,17 @@ for package in ['funasr','transformers','tokenizers','sentencepiece','soundfile'
 gui_hidden = ['PySide6.QtWebEngineWidgets','PySide6.QtWebChannel','rapidocr.main',
           'onnxruntime','llama_cpp','pythoncom','pywintypes','win32com.client',
           'edge_tts','edge_tts.communicate','edge_tts.voices','edge_tts.drm','aiohttp',
-          'certifi','lameenc','pystray._win32','sounddevice','soundfile']
+          'certifi','lameenc','pystray._win32','sounddevice','soundfile',
+          # 翻译后端是**动态导入**的：core/translation_service.py 用
+          # importlib.import_module("core.xxx_translation_model") 按名字加载，
+          # 字符串不在静态依赖图里，PyInstaller 一个都收不到。
+          # 漏了它们的后果（2026-11-15 实际发生）：日志刷
+          #   [翻译服务] GGUF模型不可用: No module named 'core.gguf_translation_model'
+          # 四个后端全部注册失败，翻译功能整体不可用，而界面看起来一切正常。
+          # 必须显式列出；新增翻译后端时同步加到这里。
+          'core.gguf_translation_model','core.opus_translation_model',
+          'core.google_translation_model','core.custom_openai_translation_model',
+          'core.translation_service']
 worker_hidden = ['sounddevice','soundfile','kaldi_native_fbank','sentencepiece','tokenizers','scipy.linalg'] + collect_submodules('funasr')
 # funasr 只在评测/语音分离里用到 sklearn、numba、llvmlite：
 #   metrics/compute_eer.py       -> sklearn.metrics.roc_curve
