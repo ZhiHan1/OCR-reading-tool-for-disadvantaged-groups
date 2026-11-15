@@ -60,7 +60,7 @@ class PlausibleTypoTest(unittest.TestCase):
 
 
 class SplitForFuzzyTest(unittest.TestCase):
-    """两字词不进模糊池，显式项单独保留。"""
+    """两字词、牌号都不进模糊池，显式项单独保留。"""
 
     def test_short_words_excluded_from_fuzzy(self):
         explicit, fuzzy = hotwords._split_for_fuzzy(["铜线", "阳极泥", "方通=方铜"])
@@ -70,6 +70,51 @@ class SplitForFuzzyTest(unittest.TestCase):
     def test_explicit_separator_kept(self):
         _, fuzzy = hotwords._split_for_fuzzy(["方通->方铜"])
         self.assertEqual(fuzzy, [])
+
+    def test_code_like_excluded_from_fuzzy(self):
+        """牌号没有拼音，进模糊池会退化成字面比对而互相篡改。"""
+        codes = ["TP1", "TU2", "BFe10-1-1", "BFe30-1-1", "QSn6.5-0.1", "HPb59-1"]
+        _, fuzzy = hotwords._split_for_fuzzy(codes)
+        self.assertEqual(fuzzy, [], "纯字母数字牌号不应进模糊池")
+
+    def test_code_and_chinese_mixed(self):
+        """词表混装时，中文词照常进模糊池，牌号被排除。"""
+        explicit, fuzzy = hotwords._split_for_fuzzy(["阴极铜", "TP1", "无氧铜杆", "BFe10-1-1"])
+        self.assertEqual(fuzzy, ["阴极铜", "无氧铜杆"])
+        self.assertEqual(explicit, [])
+
+
+class CodeLikeGuardTest(unittest.TestCase):
+    """牌号防篡改：实测 BFe10-1-1 与 BFe30-1-1 曾互相误改。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from core.config_manager import get_config
+
+        cls.cfg = get_config()
+        cls._orig = cls.cfg.get("asr", "hotwords", default=None)
+        cls.codes = ["BFe10-1-1", "BFe30-1-1", "TP1", "TU2", "QSn6.5-0.1",
+                     "QSn6.5-0.4", "HPb59-1", "HPb62-3", "QAl9-4", "QAl10-4-4"]
+        cls.cfg.set("asr", "hotwords", value=list(cls.codes))
+        hotwords.reload_hotwords()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cfg.set("asr", "hotwords", value=cls._orig)
+        hotwords.reload_hotwords()
+
+    def test_codes_never_rewritten(self):
+        """每个牌号原样输入，必须一字不改（尤其是 10 与 30 这类相邻编号）。"""
+        for code in self.codes:
+            with self.subTest(code=code):
+                text = f"这批{code}材料"
+                self.assertEqual(hotwords.apply_hotwords(text), text)
+
+    def test_similar_codes_do_not_swap(self):
+        """BFe10-1-1 / BFe30-1-1 是最容易互改的一对。"""
+        for code in ("BFe10-1-1", "BFe30-1-1"):
+            with self.subTest(code=code):
+                self.assertEqual(hotwords.apply_hotwords(code), code)
 
 
 class NormalizeEntryTest(unittest.TestCase):

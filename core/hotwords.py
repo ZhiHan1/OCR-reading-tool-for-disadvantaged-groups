@@ -29,6 +29,7 @@ FunASR 的 `generate()` 返回的 `text` 是**带空格的分字形式**
 """
 from __future__ import annotations
 
+import re
 import threading
 from typing import List, Sequence, Tuple
 
@@ -184,6 +185,23 @@ def _is_plausible_typo(original: str, replacement: str) -> bool:
 # 两字词仍可写成 `错=对` 做**显式**替换，那条路径不受此限制。
 FUZZY_MIN_CHARS = 3
 
+# 牌号（纯字母数字，如 TP1 / QSn6.5-0.1 / BFe10-1-1）不进模糊池。
+#
+# 为什么（实测 bug）：pypinyin 对纯字母数字**原样返回**，
+#   lazy_pinyin("BFe10-1-1") -> ["BFe10-1-1"]     （只有一个"字"）
+# 于是 `_per_char_scores` 逐字比对时永远通过，模糊匹配退化成字面相似度：
+#   BFe10-1-1  <->  BFe30-1-1   只差一个数字，被判为"听错"而互相篡改。
+# 实测 27 条牌号里 BFe10-1-1 / BFe30-1-1 会来回误改，比不写更糟。
+#
+# 牌号想纠错请写显式映射：`达不溜西=WC1`、`替屁一=TP1`。
+# 显式路径不经过这里。
+_CODE_LIKE = re.compile(r"^[0-9A-Za-z.\-]+$")
+
+
+def _is_code_like(word: str) -> bool:
+    """是否像牌号/型号（纯 ASCII 字母数字与连接符，无中文）。"""
+    return bool(word) and bool(_CODE_LIKE.match(word))
+
 
 def _split_for_fuzzy(hotwords: Sequence[str]):
     """把热词拆成「显式替换项」与「可用于模糊匹配的长词」。"""
@@ -196,6 +214,10 @@ def _split_for_fuzzy(hotwords: Sequence[str]):
             continue
         if any(sep in norm for sep in ("=>", "->", "→")):
             explicit.append(norm)
+            continue
+        # 牌号不进模糊池：纯字母数字没有拼音，模糊匹配会退化成
+        # 字面比对，导致 BFe10-1-1 与 BFe30-1-1 互相误改。
+        if _is_code_like(norm):
             continue
         if len(norm) >= FUZZY_MIN_CHARS:
             fuzzy.append(norm)

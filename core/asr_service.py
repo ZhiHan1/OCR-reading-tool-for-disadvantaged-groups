@@ -124,13 +124,79 @@ _CJK_SPACE_RE = re.compile(rf"(?<=[{_CJK}])\s+(?=[{_CJK}])")
 _CJK_PUNC_SPACE_RE = re.compile(rf"(?<=[{_CJK}])\s+(?=[，。！？、；：）】》」』,.!?;:)])")
 _PUNC_CJK_SPACE_RE = re.compile(rf"(?<=[，。！？、；：（【《「『])\s+(?=[{_CJK}])")
 
+# 单个字母/数字之间的空格也要合并：Paraformer 会把型号 "TP1" 输出成 "T P 1"、
+# 把 "QSn6.5-0.1" 输出成 "Q Sn 6.5 - 0.1"。三条中文正则都以 _CJK 为锚点，
+# 纯字母数字串一条都不匹配，空格原样留下，热词表里的 27 条牌号因此**永远匹配不上**。
+#
+# 规则（每一条都是踩坑换来的）：
+#   1. 只在**含字母**的片段上生效。"5 0 元" 这类纯数字不合并——
+#      它可能是「五十元」也可能是「5、0 元」，粘成 "50" 反而制造新错误。
+#   2. 片段里必须**至少有一个短 token（1~2 字符或孤立连接符）**。
+#      牌号的典型形态是 "Q Sn 6.5 - 0.1"（短-长-短-长），而纯英文句子
+#      （"I love Python code"）全是 3 字符以上的完整单词，天然被排除。
+#   3. 若所有 token 都是常见英文单词（"Hello world" / "the end"），
+#      判为句子，保留空格。
+_ALNUM_TOKEN = r"[A-Za-z0-9]+(?:[.\-][A-Za-z0-9]+)*"   # TP1 / QSn6.5 / 0.1 / 3956
+_SEP_TOKEN = r"[.\-]"                                   # 孤立的 . 或 -
+_SEP = r"[ \t]+"                                        # 允许 token 之间有空白
+_SPACED_ALNUM_RE = re.compile(
+    rf"(?<![A-Za-z0-9.])(?:{_ALNUM_TOKEN}|{_SEP_TOKEN})"
+    rf"(?:{_SEP}(?:{_ALNUM_TOKEN}|{_SEP_TOKEN}))+(?![A-Za-z0-9])"
+)
+
+# 常见的英文单词片段：用来判断「这段是不是句子而不是牌号」。
+# 不需要完整词典，只覆盖 Paraformer 会输出的高频英文即可。
+_COMMON_EN = frozenset("""
+a an the and or but if then this that these those is are was were be been
+i you he she it we they me my your his her its our their
+to of in on at for with from by as into about over under
+not no yes do does did done have has had can could will would should may might must
+hello world open close love like want need make made take taken get got give given
+good bad new old big small first last next more most some any all
+python code java html css json file data text time page error test api http
+please thank thanks sorry ok okay
+end start begin stop go come look see find use using used run set put
+ai it gpt ml ok up down out off one two three four five six seven eight nine ten
+""".split())
+
+
+def _is_wordlike_sequence(tokens: list) -> bool:
+    """判断是不是英文句子（= 不是牌号）。
+
+    判据：**每个 token 都是常见英文单词**。这样：
+        "Hello world"  -> 两个都在字典里 -> 是句子，保留空格
+        "the end"      -> 两个都在字典里 -> 是句子
+        "Open AI"      -> Open 在，AI 在  -> 是句子
+        "Q Sn 6.5"     -> "Q"/"Sn" 不在字典 -> 是牌号，合并
+    """
+    if not tokens:
+        return False
+    return all(t.lower() in _COMMON_EN for t in tokens)
+
+
+def _join_spaced_alnum(match: "re.Match") -> str:
+    """把 "T P 1" / "Q Sn 6.5 - 0.1" 这类逐字符分开的牌号合回原形。
+
+    满足以下任一条件就不合并，原样返回：
+    - 片段不含字母（纯数字，如 "5 0"）
+    - 片段连起来像一个英文句子（"Hello world"）
+    """
+    text = match.group(0)
+    if not re.search(r"[A-Za-z]", text):
+        return text  # 纯数字不合并
+    tokens = [t for t in re.split(r"[ \t]+", text) if t]
+    if _is_wordlike_sequence(tokens):
+        return text  # 是英文句子，保留空格
+    return re.sub(r"[ \t]+", "", text)
+
 
 def _clean_text(text: str) -> str:
-    """清理模型输出：去掉 SenseVoice 标签，合并中文 token 间的空格。"""
+    """清理模型输出：去掉 SenseVoice 标签，合并中文 token 与字母牌号间的空格。"""
     out = _TAG_RE.sub("", str(text or "")).strip()
     out = _CJK_SPACE_RE.sub("", out)
     out = _CJK_PUNC_SPACE_RE.sub("", out)
     out = _PUNC_CJK_SPACE_RE.sub("", out)
+    out = _SPACED_ALNUM_RE.sub(_join_spaced_alnum, out)
     return out.strip()
 
 
