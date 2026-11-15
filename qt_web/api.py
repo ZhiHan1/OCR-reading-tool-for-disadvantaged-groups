@@ -35,6 +35,16 @@ _MODEL_MANAGER: Optional["ModelManager"] = None
 # 当前 MainWindow 的 AppController，供 WebApi._mode_flags 之类的静态工具读取
 _CURRENT_APP = None
 
+# 启动期延后调用（QTimer.singleShot）与推送记录。生产环境就是真正排队；
+# 测试里靠它们观察「启动时是否真的排了模型检测」。
+_qtimer_calls = []
+_pushed = []
+
+
+def _later(delay_ms, callback):
+    _qtimer_calls.append(delay_ms)
+    QTimer.singleShot(delay_ms, callback)
+
 
 class WebApi(QObject):
     """暴露给 JS 的唯一对象：channel.objects.api"""
@@ -59,7 +69,8 @@ class WebApi(QObject):
         self._model_scan_timer.setInterval(3000)
         self._model_scan_timer.timeout.connect(self._scan_model_folders)
         self._model_scan_timer.start()
-        QTimer.singleShot(0, self._scan_model_folders)
+        _later(0, self._scan_model_folders)
+        _later(1200, self._check_model_health)
         # 麦克风列表在启动时枚举一次并缓存：之后的下拉框都读这份快照，
         # 不会因为谁调用 _build_state 而反复打开音频子系统。
         self._input_devices = []
@@ -99,6 +110,37 @@ class WebApi(QObject):
 
     def do_scan_model_folders(self, p):
         return self._scan_model_folders()
+
+    def _check_model_health(self):
+        """启动后检查外置模型目录，缺什么就推给前端提示（不阻塞启动）。
+
+        权重不进安装包，模型一律放在 EXE 同级的 `模型/` 与 `models/` 下；
+        这里给出的是**绝对路径**提示，方便用户直接把文件夹拖到对应位置。
+        """
+        try:
+            from core.asr_service import SUPPORT_MODEL_DIRS, _is_model_dir
+            from utils.paths import app_root
+
+            root = app_root()
+            asr = self.do_asr_models({})
+            models = [m for m in (asr.get('models') or []) if m.get('available')]
+            missing = []
+            if not models:
+                missing.append(str(root / '模型' / '语音'))
+            missing += [path for path in SUPPORT_MODEL_DIRS.values() if not _is_model_dir(path)]
+            payload = {
+                'type': 'models-missing',
+                'missing': missing,
+                'root': str(root),
+                'message': '缺少模型文件，语音识别不可用。请把模型放到上述文件夹后重试。',
+            }
+            if missing:
+                print('[模型检查] 缺少外置模型: ' + ', '.join(missing))
+                _later(500, lambda: self._push(payload))
+            return payload
+        except Exception as exc:  # noqa: BLE001
+            print(f'[模型检查] 失败: {exc}')
+            return {'missing': [], 'error': str(exc)}
 
     def do_open_model_folder(self, p):
         kind = str(p.get('kind') or 'voice')
@@ -499,12 +541,6 @@ class WebApi(QObject):
         n = hotword_learning.dismiss_candidates(rights)
         return self._hotword_payload({'message': f'已忽略 {n} 条'})
 
-    def do_hotwords_clear_candidates(self, p):
-        from core import hotword_learning
-
-        n = hotword_learning.clear_candidates()
-        return self._hotword_payload({'message': f'已清空 {n} 条候选'})
-
     def do_hotwords_learn(self, p):
         """从一次「识别原文 -> 用户确认文本」的修改中学习候选。
 
@@ -544,40 +580,9 @@ class WebApi(QObject):
             fh.write(str(text).encode('utf-8'))
         return path
 
-    def do_asr_import_model(self, p):
-        if self.win.voice.phase != 'idle':
-            return {'ok': False, 'error': '请先停止语音输入，再导入模型'}
-        path = str(p.get('path') or '')
-        if not path:
-            picked = self.do_pick_folder({'title': '选择本地 FunASR 模型文件夹（只登记路径）'})
-            if not picked.get('ok'):
-                return picked
-            path = picked['path']
-        if not path:
-            return {'ok': False, 'cancelled': True}
-        item = self.win.voice.registry.add(path, str(p.get('name') or ''))
-        if not self.win.voice.unload():
-            return {'ok': False, 'error': '旧模型未能卸载，请重试'}
-        self.config.set('asr', 'local_model', value=item['id'])
-        self.config.save()
-        return self.do_asr_models({})
-
-    def do_asr_remove_model(self, p):
-        if self.win.voice.phase != 'idle':
-            return {'ok': False, 'error': '请先停止语音输入，再移除模型'}
-        model_id = str(p.get('id') or '')
-        if not p.get('confirmed'):
-            return {'ok': False, 'error': '请先确认从列表移除'}
-        selected = self.config.get('asr', 'local_model', default='paraformer_large')
-        if selected == model_id and not self.win.voice.unload():
-            return {'ok': False, 'error': '模型未能卸载，请重试'}
-        self.win.voice.registry.remove(model_id)
-        if selected == model_id:
-            remaining = self.win.voice.registry.list()
-            replacement = next((m['id'] for m in remaining if m['available']), '')
-            self.config.set('asr', 'local_model', value=replacement)
-            self.config.save()
-        return self.do_asr_models({})
+    # 说明：语音模型不做「手工导入/移除」。模型放进 EXE 同级 模型/语音/ 后，
+    # ModelRegistry.scan() 会自动识别并登记（启动即扫 + 每 3s/30s 轮询），
+    # 原先的 do_asr_import_model / do_asr_remove_model 前端从未调用，已删除。
 
     # ---- 配置 ----
 
@@ -634,16 +639,6 @@ class WebApi(QObject):
         self._apply_current(before)
         return {"ok": True}
 
-    def do_set_ocr_device(self, p):
-        device = str(p.get("device", "cpu"))
-        self.config.set("ocr", "device", value=device)
-        self.config.save()
-        try:
-            self.app.ocr_service.reload_device(device)
-        except Exception as e:  # noqa: BLE001
-            print(f"[设备] 切换失败: {e}")
-        return {"ok": True}
-
     def do_set_mode_enabled(self, p):
         mode = str(p.get("mode", ""))
         enabled = bool(p.get("enabled"))
@@ -651,11 +646,6 @@ class WebApi(QObject):
             return {"ok": False, "error": "未知功能"}
         self.win.set_mode_enabled(mode, enabled)
         self._push({"type": "enabled-changed", "mode": mode, "enabled": enabled})
-        return {"ok": True}
-
-    def do_save_config(self, p):
-        self.config.save()
-        self._apply_current()
         return {"ok": True}
 
     def _apply_current(self, before=None, full=False):
@@ -1145,6 +1135,7 @@ class WebApi(QObject):
     # ================= 推送 =================
 
     def _push(self, msg: dict):
+        _pushed.append(msg)
         self.event.emit(json.dumps(msg, ensure_ascii=False, default=str))
 
     def push_status(self, text: str, kind: str = ""):

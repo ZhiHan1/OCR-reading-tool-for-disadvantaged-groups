@@ -252,13 +252,6 @@ def probe_devices(force: bool = False) -> Dict:
         return result
 
 
-def clear_cache():
-    """清空探测缓存（测试或运行中装了驱动后用）"""
-    global _probe_cache
-    with _probe_lock:
-        _probe_cache = None
-
-
 def device_display_name(device: Optional[Dict]) -> str:
     """设备显示名：GPU 带上序号与显存，便于多卡时区分"""
     if not device:
@@ -306,15 +299,6 @@ def resolve_device(device_id: str, force: bool = False) -> Dict:
         logger.warning("[设备] 配置的设备 %s 不可用，回退到 CPU", device_id)
 
     return probe_devices(force=force)["cpu"]
-
-
-def get_ocr_device(force: bool = False) -> Dict:
-    """读取配置并解析出 OCR 应使用的设备"""
-    from core.config_manager import get_config
-
-    config = get_config()
-    device_id = config.get("ocr", "device", default="cpu") or "cpu"
-    return resolve_device(device_id, force=force)
 
 
 def diagnostic_text() -> str:

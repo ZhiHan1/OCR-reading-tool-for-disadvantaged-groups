@@ -331,20 +331,6 @@ class ModelManager:
             }
         return None
 
-    def get_model_path(self, model_id: str) -> Optional[str]:
-        """
-        获取模型文件路径
-
-        Args:
-            model_id: 模型ID
-
-        Returns:
-            模型路径，如果不存在则返回 None
-        """
-        if model_id in self.models:
-            return self.models[model_id]['path']
-        return None
-
     def get_active_model_path(self) -> Optional[str]:
         """
         直接获取当前使用的模型路径（最快速的方式）

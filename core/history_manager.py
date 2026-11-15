@@ -60,10 +60,6 @@ class HistoryManager:
             return self.history[-1].text
         return None
 
-    def get_all_texts(self) -> List[str]:
-        """获取所有历史文本"""
-        return [h.text for h in self.history]
-
     def clear(self) -> None:
         """清空历史记录"""
         self.history.clear()
@@ -207,45 +203,6 @@ class HistoryManager:
             prefix_lengths.append(prefix_len)
 
         return prefix_lengths
-
-    def _find_common_prefix_length(self, text1: str, text2: str) -> int:
-        """
-        查找两个字符串的公共前缀长度
-        优化: 使用NumPy向量化比较
-
-        Args:
-            text1: 文本1
-            text2: 文本2
-
-        Returns:
-            公共前缀的字符数
-        """
-        if not text1 or not text2:
-            return 0
-
-        # 使用NumPy字节数组比较
-        bytes1 = np.frombuffer(text1.encode('utf-8'), dtype=np.uint8)
-        bytes2 = np.frombuffer(text2.encode('utf-8'), dtype=np.uint8)
-
-        min_len = min(len(bytes1), len(bytes2))
-        if min_len == 0:
-            return 0
-
-        # 向量化比较
-        comparison = bytes1[:min_len] == bytes2[:min_len]
-
-        if np.all(comparison):
-            return min(len(text1), len(text2))
-
-        # 找到第一个不同的字节位置
-        first_diff = np.argmax(~comparison)
-
-        # 转换字节位置为字符数
-        try:
-            common_prefix = bytes1[:first_diff].tobytes().decode('utf-8', errors='ignore')
-            return len(common_prefix)
-        except:
-            return 0
 
     def get_history_summary(self) -> str:
         """

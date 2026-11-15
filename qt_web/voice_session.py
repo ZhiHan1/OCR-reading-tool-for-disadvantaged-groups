@@ -27,6 +27,8 @@ class VoiceSession(QObject):
         self.mode = 'manual'
         self.pending = 0
         self.text = '就绪 · 松开自动识别'
+        # 唤醒时若正在说话，把重连推迟到本轮结束（见 handle_system_resume）。
+        self._resume_pending = False
         self._watchdog = QTimer(self)
         self._watchdog.setSingleShot(True)
         self._watchdog.timeout.connect(self._timeout)
@@ -43,6 +45,9 @@ class VoiceSession(QObject):
             self._watchdog.stop()
             self.level.emit(0.0)
         self.changed.emit(self.snapshot())
+        # 唤醒时若正在说话，重连被推迟到这里补做。
+        if phase == 'idle':
+            self._reconnect_if_pending()
 
     def _spawn(self):
         p = QProcess(self)
@@ -85,6 +90,46 @@ class VoiceSession(QObject):
         self.model_status = '模型尚未加载（下次识别时加载）'
         self.level.emit(0.0)
         return True
+
+    def handle_system_resume(self):
+        """系统从休眠唤醒后重建音频设备表。
+
+        PortAudio 只在导入时 `Pa_Initialize()` 一次，设备表从此固化。
+        Windows 休眠会卸载/复位音频驱动，唤醒后端点重新枚举，而设备表
+        不会自动刷新——表现为「录音流能打开，但采到纯静音」，
+        界面上就是「未检测到说话」，重试无效，只有重启软件才好。
+
+        语音工作进程是独立进程，杀掉它等于重新导入 sounddevice、
+        重建 PortAudio 设备表。这里只在空闲时重启，进行中的录音不打断
+        （打断会丢用户正在说的话）；忙的时候记一笔，等回到 idle 再重连。
+        """
+        if self.phase != 'idle':
+            # 正在录音/识别：不动它，等本轮结束后由 _reconnect_if_pending 补做。
+            self._resume_pending = True
+            self.text = '系统已唤醒，本次录音结束后将重连麦克风'
+            self.changed.emit(self.snapshot())
+            return False
+        self._resume_pending = False
+        if not self._discard():
+            return False
+        self._state('idle', '系统已唤醒，麦克风已重新连接')
+        return True
+
+    def _reconnect_if_pending(self):
+        """录音结束后补做唤醒重连。
+
+        唤醒时若正在说话，当时不能杀进程（会丢话）；等回到 idle 再重启，
+        否则用户下次说话仍可能落在失效的音频设备表上。
+
+        注意不能走 `_state()`：那样会再次进入 idle 分支造成递归。
+        这里直接改文案并发信号。
+        """
+        if not getattr(self, '_resume_pending', False) or self.phase != 'idle':
+            return
+        self._resume_pending = False
+        if self._discard():
+            self.text = '系统已唤醒，麦克风已重新连接'
+            self.changed.emit(self.snapshot())
 
     def start(self, source):
         if source not in ('button', 'float'):

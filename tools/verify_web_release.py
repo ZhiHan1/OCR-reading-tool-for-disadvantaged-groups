@@ -35,19 +35,35 @@ def main():
         if (out / relative).is_dir()
     ]
 
-    # 翻译/LLM 权重外置；语音与 OCR 运行时资源随包发布。
-    forbidden = {'.gguf', '.safetensors', '.ckpt'}
+    # 权重一律外置：**程序本体**里不许出现 .onnx / .pt / .gguf 等；
+    # 模型只放在 EXE 同级的 模型/ 与 models/ 下（相对 sys.executable 解析），
+    # 所以这两个目录要排除在「本体」之外。
+    forbidden = {'.gguf', '.safetensors', '.ckpt', '.onnx', '.pt', '.pth', '.bin'}
+    external_prefixes = ('模型', 'models')
+    # Chromium V8 快照与 chardet 的编码模型也是 .bin，但它们是运行库不是权重。
+    non_model = (('_internal', 'PySide6'), ('_internal', 'chardet'))
+
+    def in_external(relative):
+        parts = relative.parts
+        if parts[:1] in [(p,) for p in external_prefixes]:
+            return True
+        return any(parts[:len(prefix)] == prefix for prefix in non_model)
+
     weights = [
-        str(p.relative_to(out))
+        p.relative_to(out).as_posix()
         for p in out.rglob('*')
-        if p.is_file() and p.suffix.lower() in forbidden
+        if p.is_file()
+        and p.suffix.lower() in forbidden
+        and not in_external(p.relative_to(out))
     ]
     checks['translation_weights_external'] = not weights
+    report['stray_weights'] = weights[:20]
+    report['stray_weights'] = weights[:20]
     checks['translation_folder_external'] = (out / '模型/翻译').is_dir()
     checks['ocr_runtime_assets'] = OCR_FILES <= {
         p.name for p in (out / 'models/ocr').glob('*.onnx')
     }
-    checks['voice_models_bundled'] = bool(voice_models) and all(
+    checks['voice_models_external'] = bool(voice_models) and all(
         (out / relative / name).is_file()
         for relative, _, _ in voice_models
         for name in MODEL_FILES
@@ -125,7 +141,7 @@ def main():
         n in gui_modules | worker_modules for n in ['qt_main', 'main_modular_win11']
     )
 
-    # 语音模型/OCR/VAD/标点全部从发布目录读取；只有翻译 GGUF 来自外置目录。
+    # 语音模型/OCR/VAD/标点全部从 EXE 同级的外置目录读取；只有翻译 GGUF 来自源码树。
     external = {
         'voice': [
             {'id': 'test_' + kind, 'name': name, 'kind': kind,

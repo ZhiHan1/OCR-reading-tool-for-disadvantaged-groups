@@ -62,13 +62,6 @@ class ScanModeController:
 
     # ===== 生命周期 =====
 
-    def toggle(self):
-        """启动/停止实时扫描"""
-        if self.is_running:
-            self.stop()
-        else:
-            self.start()
-
     def start(self):
         """启动实时扫描（没有区域时先让用户框选）"""
         if self.is_running or self.is_selecting:

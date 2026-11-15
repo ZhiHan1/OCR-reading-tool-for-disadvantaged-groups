@@ -101,6 +101,48 @@ p.write_bytes(text.encode("utf-8"))            # 无 BOM
 例：回退 `from PySide6.QtWidgets import QApplication, QWidget` 后，
 `tests/test_selector.py` 有 4 个用例 FAIL。
 
+### 6.2.1 反向验证必须清 `__pycache__`（KB-GOT-013）
+
+2026-11-15 实测踩到：反向验证脚本在**同一秒内**先写坏文件、跑测试、
+再写回原文件。结果源文件与 `.pyc` 的 mtime 落在同一秒，Python 判定
+缓存有效，**导入的仍是坏版本**，出现「文件已还原、测试却还在报错」的假象。
+
+当时的错误输出：`AssertionError: 537 != 536`（文件里明明是 `0x0218`）。
+
+**规则**：任何改写源文件后立即运行测试的脚本，都必须显式清理缓存：
+
+```python
+for pyc in (path.parent / '__pycache__').glob(path.stem + '*.pyc'):
+    pyc.unlink(missing_ok=True)
+```
+
+清理后立即正确。这条同样适用于手工验证——怀疑「改了没生效」时，
+先删 `__pycache__` 再判断，不要急着改代码。
+
+### 6.2.2 删了方法要全局搜调用方（KB-GOT-014）
+
+**真实事故**：2026-11-15 删除 `ModelRegistry.remove()`（手工导入模型接口的
+配套方法）时，只搜了 `qt_web/api.py` 与前端 JS，漏了
+`qt_web/release_gui_check.py`。后果是**单元测试 115 项全绿，打包最后一步才炸**：
+
+```
+AttributeError: 'ModelRegistry' object has no attribute 'remove'
+```
+
+（在 `release_gui_check.py` 的 `auto_discovery` 清理逻辑里）
+
+教训有两条：
+
+1. **打包自检脚本是「测试的死角」**：`release_gui_check.py` /
+   `release_worker_check.py` 只在 `py -3.14 build_web.py` 时执行，
+   `unittest discover` 完全覆盖不到。删公共方法时必须把它们算进调用方。
+2. 改用**静态扫描全仓库**的守门测试兜底，而不是靠人肉记忆：
+   `tests/test_external_models.py::test_no_code_calls_removed_registry_methods`
+   用 `ast` 找出所有 `<registry 变量>.remove(...)` 调用。
+
+**删方法的正确顺序**：先全局 `grep` 方法名（含 `dist/`、`tools/` 之外的
+所有 `*.py`），确认零调用后再删；删完立刻补一条扫描型守门测试。
+
 ### 6.3 端到端验证优先于单元验证
 
 实际跑一遍 `api.do_func2_select()` → 截图 → OCR，看能不能出字，
@@ -182,16 +224,27 @@ staging（OCR 权重 / 语音模型 / CUDA 运行库）→ `verify_web_release.p
 
 关键约定：
 
-- **`OCR_Reader_Web.spec` 不收集任何预训练权重**（`no_weights()` 过滤
-  `.onnx/.pt/.gguf/...`），模型一律由 `tools/stage_*` 在打包后复制。
-- **语音模型是自适应的**：`stage_voice_models.py` 只复制 `模型/语音/` 下实际存在的
-  目录，并按 `config.yaml` 的 `model` 字段生成 `models/asr/registry.json`。
-  当前机器只有 `paraformer-large`，所以发布版只带它；**至少需要一个识别模型**，
-  并且 `models/asr/fsmn-vad`、`models/asr/ct-punc` 是硬性必需。
-- **翻译 GGUF 永远外置**：`verify_web_release.py` 会检查发布目录内不存在
-  `.gguf/.safetensors/.ckpt`，并要求 `模型/翻译/` 目录存在（用户自行放入）。
-- 语音模型目录里若混入 `.gguf/.safetensors/.ckpt`，staging 直接报错，
-  防止误把 1.4 GB 翻译模型打进语音目录。
+- **权重一律外置（KB-GOT-012）**：`OCR_Reader_Web.spec` 的 `no_weights()` 挡住
+  `.onnx/.pt/.gguf/...`，`build_web.py` 的 `check_weights()` 再兜一道底，
+  安装包本体里不许出现任何权重。模型放在 **EXE 同级**的 `模型/`（语音、翻译）与
+  `models/`（OCR / VAD / 标点 / 目录簿）下，由 `utils.paths.app_root()`
+  以 `sys.executable` 为锚按相对路径解析——**不要改成 `sys.argv[0]` 或 `__file__`**，
+  打包后它们指向 `_internal/`，会导致找不到模型。
+- **打包只产出程序本体**：`build_web.py` 只跑 `stage_gpu_runtime.py`。
+  `stage_voice_models.py` / `stage_ocr_runtime.py` 已退出打包流程（脚本保留备用）。
+  需要把本机权重摆到产物旁边时用 `py -3.14 tools/sync_external_models.py <产物目录>`，
+  或打包时加 `--sync-models`。
+- **外置目录要排除在「本体」之外**：`check_weights()` 与
+  `verify_web_release.py` 都按 `模型/`、`models/` 前缀跳过，
+  否则外置方案永远无法通过检查（这两个目录本来就该有 `.pt/.onnx`）。
+- **启动检测**：`WebApi._check_model_health()` 在启动 1.2 秒后检查
+  `模型/语音` 与 `models/asr/{fsmn-vad,ct-punc}`，缺什么推 `models-missing`，
+  前端右下角列出本机绝对路径。守门测试 `tests/test_external_models.py`
+  （11 项，含 5 条反向验证）。
+- **语音模型是自适应的**：`models/asr/registry.json` 只写相对路径；
+  `ModelDiscovery.scan()` 会稳定两轮后自动登记用户新放进 `模型/语音/` 的模型，
+  注意 `model.pt` **小于 2 MiB 会被当成假文件跳过**（`utils/model_discovery.py:47`）。
+- **翻译 GGUF 永远外置**：`模型/翻译/` 由程序首次启动创建，用户自行放入。
 - 构建机需要 `py -3.14`、PyInstaller、以及 `nvidia-*` 运行库包；
   `stage_gpu_runtime.py` 按**精确白名单**把 cublas / cudart / cufft / cuDNN 的
   11 个 DLL 复制到 `_internal/gpu_runtime`，缺任何一个都失败。
@@ -205,7 +258,16 @@ staging（OCR 权重 / 语音模型 / CUDA 运行库）→ `verify_web_release.p
   去掉 SenseVoiceSmall 硬编码，改为按实际模型自适应（此前缺该目录会直接打包失败）。
 - 2026-11-05 新增自检项 `microphone_listing`：由 worker 自检报告 `input_devices`，
   要求非空。GUI 进程不加载 sounddevice，真正打开设备的永远是语音子进程。
-  当前共 25 项检查。
+- 2026-11-15：权重完全外置（KB-GOT-012），自检共 25 项，其中
+  `voice_models_bundled` 更名为 `voice_models_external`。
+- 2026-11-15：体积瘦身（KB-PERF-013），`no_weights()` 同时承担 Qt 裁剪：
+  用 `_QT_KEEP` 白名单只留 22 个 Qt DLL，删掉全部 `.qm`、非中英文 `.pak`、
+  devtools 资源与 `plugins/qmltooling/`。**`_QT_KEEP` 是白名单，漏一个 DLL
+  就会让程序起不来**，改动后务必跑一次完整打包看 `gui` 自检项。
+  体积从 4.45 GiB 降到 4.18 GiB。
+- **`release-test.json` 的 `size_bytes.total` 不是最终目录大小**，
+  它是打包中段统计的快照，要看真实体积请自行遍历目录（去重硬链接），
+  详见 `performance.md` §13.6.4。
 
 ## 10. 仓库与 Git（KB-GOT-010）
 

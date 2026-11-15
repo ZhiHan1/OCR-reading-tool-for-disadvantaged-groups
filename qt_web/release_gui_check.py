@@ -53,7 +53,12 @@ def gui_check(path):
                 voice_found=[m for m in vr.list() if Path(m['path'])==voice_dir]
                 translation_found=[m for m in mm.get_all_models() if Path(m['path'])==gguf]
                 report['auto_discovery']={'voice':len(voice_found)==1,'translation':len(translation_found)==1}
-                for m in voice_found:vr.remove(m['id']);vr.discovery.set_hidden(m['path'],False)
+                # 用完后把临时目录从登记簿里摘掉，并解除「已隐藏」，避免污染
+                # 用户真实的模型列表。ModelRegistry 不再提供 remove()（手工
+                # 导入接口已删除），这里直接按 id 过滤后落盘。
+                stale={m['id'] for m in voice_found}
+                if stale:vr._save([r for r in vr.records() if r.get('id') not in stale])
+                for m in voice_found:vr.discovery.set_hidden(m['path'],False)
                 for m in translation_found:mm.remove_model(m['id'],delete_file=False);mm.discovery.set_hidden(m['path'],False)
         if '--test-models' in sys.argv:
             spec=json.loads(Path(sys.argv[sys.argv.index('--test-models')+1]).read_text(encoding='utf-8'))

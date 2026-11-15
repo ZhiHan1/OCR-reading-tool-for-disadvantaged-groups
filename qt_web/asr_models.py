@@ -82,6 +82,12 @@ class ModelRegistry:
         return dict(item, path=str(directory))
 
     def add(self, path, name=''):
+        """登记一个模型目录（`ModelRegistry.scan()` 自动扫描时调用）。
+
+        注意：`remove()` 已随手工「移除模型」接口一起删除——被移除的目录由
+        `discovery.set_hidden()` 标记隐藏，扫描不会再登记回来；要恢复用户的
+        手工选择，把模型目录从 模型/语音/ 挪走即可。
+        """
         directory, kind = inspect_model(path, self.base)
         self.discovery.set_hidden(directory,False)
         entries = self.records()
@@ -93,12 +99,6 @@ class ModelRegistry:
         entries.append(item)
         self._save(entries)
         return item
-
-    def remove(self, model_id):
-        entries = self.records()
-        for item in entries:
-            if item['id']==model_id:self.discovery.set_hidden(item['path'],True)
-        self._save([m for m in entries if m['id'] != model_id])
 
 
 def configure_service(service, descriptor):

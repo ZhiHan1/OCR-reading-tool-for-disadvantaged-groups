@@ -32,6 +32,7 @@ from qt_ui.selector_adapter import QtSelectorAdapter
 from qt_web import api as api_module
 from qt_web.api import WebApi
 from utils.system_tray import SystemTray
+from qt_web.power_monitor import PowerMonitor
 from qt_web.voice_session import VoiceSession
 from qt_web.cursor_input import CursorInput
 from utils.paths import resource_root
@@ -309,6 +310,11 @@ class WebMainWindow(QMainWindow):
         self.voice.level.connect(self.voice_float.set_level)
         self.voice.changed.connect(self.voice_float.apply_state)
 
+        # 休眠唤醒后 PortAudio 设备表过期，录音会「打开成功但采到静音」。
+        # 这里监听 Windows 电源广播，唤醒时重启语音工作进程以重建设备表。
+        self.power_monitor = PowerMonitor(self)
+        self.power_monitor.resumed.connect(self.voice.handle_system_resume)
+
         self.translation_manager = TranslationManager(
             self.config,
             self.app.tts_service,
@@ -392,6 +398,17 @@ class WebMainWindow(QMainWindow):
     # ---------- 结果路由需要的一个占位 get_widget ----------
     def _get_noop_widget(self, _attr):
         return None
+
+    def nativeEvent(self, event_type, message):
+        """接收 Windows 原生消息，把休眠唤醒转给 PowerMonitor。
+
+        只有子类化 QMainWindow 才能拿到 WM_POWERBROADCAST；不处理的消息
+        必须交回 Qt 默认逻辑，否则窗口会失去拖拽、DPI 等原生行为。
+        """
+        handled, result = self.power_monitor.handle_native_event(event_type, message)
+        if handled:
+            return True, result
+        return super().nativeEvent(event_type, message)
 
     # ---------- 后端回调接线（与 qt_main._setup_callbacks 等价） ----------
     def _setup_callbacks(self):

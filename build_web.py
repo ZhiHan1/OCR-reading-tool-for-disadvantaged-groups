@@ -1,8 +1,14 @@
-"""Web 版一键打包：PyInstaller 双 EXE → 运行时资源 staging → 发布版自检。
+"""Web 版一键打包：PyInstaller 双 EXE → GPU 运行库 → 发布版自检。
+
+**权重不进安装包**。产物里只有程序本体（双 EXE + `_internal/` + 说明 + 图标）；
+模型放在 EXE 同级的 `模型/`（语音、翻译）与 `models/`（OCR / VAD / 标点 /
+目录簿）下，由 `utils.paths.app_root()` 以 `sys.executable` 为锚按相对路径查找，
+整目录换盘符、换机器都能用。
 
 用法：
     py -3.14 build_web.py               完整打包 + 自检
     py -3.14 build_web.py --skip-tests  只打包，不跑发布版自检
+    py -3.14 build_web.py --sync-models 打包后顺带把本机权重同步到产物目录
 
 产物：dist/Web-<yyyyMMdd-HHmmss>/OCR_Reader_Web/
 最新产物路径写入 build/latest-web-release.txt。
@@ -27,8 +33,11 @@ PREFLIGHT = (
     'kaldi_native_fbank, win32com.client; print("DEPENDENCIES_OK")'
 )
 EXES = ('OCR_Reader_Web.exe', 'OCR_VoiceWorker.exe')
-WEIGHT_SUFFIXES = {'.gguf', '.safetensors', '.ckpt'}
-MIN_FREE_BYTES = 12 * 1024 ** 3  # 12 GiB：依赖 + 模型 + 双 EXE 的保守下限
+WEIGHT_SUFFIXES = {'.gguf', '.safetensors', '.ckpt', '.onnx', '.pt', '.pth'}
+# 不属于权重的二进制：Chromium 的 V8 快照、chardet 的编码模型、DLL 之外的 .bin。
+# 一律按路径排除，避免「装了 PySide6 就永远打包失败」。
+NON_MODEL_BINS = ('_internal/PySide6/', '_internal/chardet/')
+MIN_FREE_BYTES = 6 * 1024 ** 3  # 6 GiB：依赖 + 双 EXE 的保守下限（权重不再进包）
 
 
 def say(message=''):
@@ -81,20 +90,38 @@ def py(*args):
     return [PYTHON, *args]
 
 
-def check_weights(release):
+def check_weights(release, external=()):
+    """检查安装包本体里没有权重。
+
+    外置模型目录（`模型/`、`models/`）本来就该有 `.pt/.onnx`，因此按路径前缀排除，
+    而不是靠后缀一刀切——否则外置方案永远无法通过检查。
+    """
+    release = Path(release)
+    skip = {('模型',), ('models',)} | {tuple(Path(p).parts) for p in external}
+    skip |= {tuple(Path(p).parts) for p in NON_MODEL_BINS}
+
+    def is_external(relative):
+        parts = tuple(relative.parts)
+        return any(parts[:len(prefix)] == prefix for prefix in skip if prefix)
+
     found = [
-        str(path.relative_to(release))
+        path.relative_to(release).as_posix()
         for path in release.rglob('*')
-        if path.is_file() and path.suffix.lower() in WEIGHT_SUFFIXES
+        if path.is_file()
+        and path.suffix.lower() in WEIGHT_SUFFIXES
+        and not is_external(path.relative_to(release))
     ]
     if found:
-        raise RuntimeError('发布目录里出现了外置权重：' + ', '.join(found))
+        raise RuntimeError('安装包本体里出现了权重文件（应放 EXE 同级的 模型/ 与 models/）：'
+                           + ', '.join(found[:10]))
 
 
 def main():
     parser = argparse.ArgumentParser(description='打包 Web 版 OCR 朗读工具')
     parser.add_argument('--skip-tests', action='store_true', help='跳过发布版自检')
     parser.add_argument('--tag', default='', help='自定义产物名后缀')
+    parser.add_argument('--sync-models', action='store_true',
+                        help='打包后把本机权重同步到产物目录（默认不同步，纯出程序）')
     args = parser.parse_args()
 
     stamp = dt.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -141,23 +168,32 @@ def main():
     check_weights(out)
     say('README.md / Logo.ico 已复制')
 
-    step('4/6 运行时资源 staging')
-    for script, label in [
-        ('tools/stage_ocr_runtime.py', 'OCR 权重'),
-        ('tools/stage_voice_models.py', '语音模型'),
-        ('tools/stage_gpu_runtime.py', 'CUDA 运行库'),
-    ]:
-        if run(py(script, str(out))) != 0:
-            raise RuntimeError(label + ' staging 失败：' + script)
+    step('4/6 运行时资源（仅程序本体）')
+    if run(py('tools/stage_gpu_runtime.py', str(out))) != 0:
+        raise RuntimeError('CUDA 运行库 staging 失败：tools/stage_gpu_runtime.py')
+    # 权重一律外置，安装包里不许出现 .onnx / .pt / .gguf：
+    # 缺模型不是打包错误，运行时由 <EXE 目录>/模型 与 models/ 提供。
+    (out / '模型/翻译').mkdir(parents=True, exist_ok=True)
+    check_weights(out)
+    if args.sync_models:
+        if run(py('tools/sync_external_models.py', str(out))) != 0:
+            raise RuntimeError('外置模型同步失败：tools/sync_external_models.py')
+    code = run(py('tools/stage_external_models.py', str(out)))
+    if code != 0:
+        say('提示：外置模型不完整，安装包可正常生成，但运行前需要补齐模型目录。')
+        say('      可用 py -3.14 tools\\sync_external_models.py "' + str(out) + '" 同步本机权重。')
     say('staging 完成')
 
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(str(out), encoding='utf-8')
 
-    manifest_file = out / 'voice-models-manifest.json'
+    manifest_file = out / 'external-models-manifest.json'
     if manifest_file.is_file():
         manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
-        say('随包模型: ' + ', '.join(item['path'] for item in manifest['models']))
+        say('外置模型: ' + (
+            '完整' if not manifest.get('missing')
+            else '缺少 ' + ', '.join(manifest['missing'])
+        ))
 
     if args.skip_tests:
         step('5/6 自检（已跳过）')
@@ -172,8 +208,8 @@ def main():
     step('6/6 汇总')
     files = [path for path in out.rglob('*') if path.is_file()]
     total = sum(path.stat().st_size for path in files)
-    say('文件数: {}'.format(len(files)))
-    say('总体积: {:.2f} GiB'.format(total / 1024 ** 3))
+    say('程序文件数: {}'.format(len(files)))
+    say('程序体积: {:.2f} GiB（不含模型）'.format(total / 1024 ** 3))
     say('')
     say('WEB_BUILD_OK: ' + str(out))
     say('最新产物记录: ' + str(latest))

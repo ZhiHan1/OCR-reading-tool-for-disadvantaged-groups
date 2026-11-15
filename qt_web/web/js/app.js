@@ -44,6 +44,38 @@
 
   A.toast = toast;
 
+  /* 模型缺失的提示停留更久（用户需要照着路径去放文件）。 */
+  function alert(text) {
+    let box = A.qs("#toast-box");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "toast-box";
+      box.style.cssText =
+        "position:fixed;right:24px;bottom:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;";
+      document.body.appendChild(box);
+    }
+    const item = document.createElement("div");
+    item.textContent = text;
+    item.style.cssText =
+      "max-width:420px;white-space:pre-wrap;word-break:break-all;" +
+      "padding:12px 16px;border-radius:12px;font-size:12.5px;font-weight:600;line-height:1.7;" +
+      "background:var(--modal-bg);border:1px solid var(--line-strong);" +
+      "box-shadow:var(--sh);color:var(--ink-rose);" +
+      "opacity:0;transform:translateY(8px);transition:all .22s ease;";
+    box.appendChild(item);
+    requestAnimationFrame(function () {
+      item.style.opacity = "1";
+      item.style.transform = "translateY(0)";
+    });
+    setTimeout(function () {
+      item.style.opacity = "0";
+      item.style.transform = "translateY(8px)";
+      setTimeout(function () {
+        item.remove();
+      }, 260);
+    }, 12000);
+  }
+
   /* ---------- 后端状态回填 ---------- */
   function applyState(state) {
     if (!state) return;
@@ -63,6 +95,11 @@
     A.bridge.on('model-folders-changed', function (msg) {
       A.state.models = msg.models;
       A.state.asr = Object.assign(A.state.asr || {}, {models:msg.asr.models,local_model:msg.asr.selected});
+    });
+    A.bridge.on('models-missing', function (msg) {
+      const paths = (msg && msg.missing) || [];
+      if (!paths.length) return;
+      alert('缺少模型文件，语音识别不可用。\n请把模型放到：\n' + paths.join('\n'));
     });
     A.bridge.on('config-current', function (msg) {
       const c = msg.config || {};

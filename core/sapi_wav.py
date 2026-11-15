@@ -31,38 +31,6 @@ def is_available() -> bool:
         return False
 
 
-def synthesize_wav(text, voice_name=None, rate=0, volume=1.0, pitch=0) -> bytes:
-    """把文字合成为 WAV 字节
-
-    Args:
-        text: 要合成的文字
-        voice_name: SAPI 语音名称（空则用系统默认）
-        rate: 语速 -10 ~ 10（与朗读一致）
-        volume: 音量 0.0 ~ 1.0
-        pitch: 语调 -10 ~ 10（通过 SSML prosody 换算）
-
-    Returns:
-        WAV 文件的完整字节；text 为空时返回 b""
-
-    Raises:
-        RuntimeError: 缺少 pywin32 或 SAPI 初始化失败
-    """
-    text = str(text or "").strip()
-    if not text:
-        return b""
-
-    try:
-        import pythoncom
-    except Exception as e:
-        raise RuntimeError("本机语音需要 pywin32：pip install pywin32") from e
-
-    pythoncom.CoInitialize()
-    try:
-        return _synthesize(text, voice_name, rate, volume, pitch)
-    finally:
-        pythoncom.CoUninitialize()
-
-
 def _synthesize(text, voice_name, rate, volume, pitch) -> bytes:
     import win32com.client
 

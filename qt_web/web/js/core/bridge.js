@@ -75,7 +75,7 @@
         return new Promise(function (resolve, reject) {
           let done = false;
           // 用户选目录/文件时不应被普通请求的 20 秒超时打断。
-          const isPicker = action === 'pick_folder' || action === 'pick_file' || action === 'export_config' || (action === 'asr_import_model' && !(payload && payload.path));
+          const isPicker = action === 'pick_folder' || action === 'pick_file' || action === 'export_config';
           const timer = isPicker ? null : setTimeout(function () {
             if (!done) {
               done = true;

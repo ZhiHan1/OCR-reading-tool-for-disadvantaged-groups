@@ -90,11 +90,11 @@
         '<div class="mode-caption">只列出 Windows 判定为「在线」的麦克风（与系统设置一致）；插拔设备后点「刷新」。留空则跟随 Windows 默认输入。</div>' +
         '<div class="model-row">' +
         '<span class="model-label">识别模型</span>' +
-        '<select class="select" id="asr-model">' + (models.length ? optionList(models, a.local_model) : '<option value="">请导入本地模型目录</option>') + '</select>' +
+        '<select class="select" id="asr-model">' + (models.length ? optionList(models, a.local_model) : '<option value="">未找到语音模型</option>') + '</select>' +
         C.btn("加载", { tone: "primary", size: "sm", id: "asr-load" }) +
         '<span class="hint-inline" id="asr-model-status">' + A.esc(a.model_status || "首次识别时加载") + '</span>' +
         '</div>' +
-        '<div class="mode-caption" id="asr-model-path">' + A.esc(selectedModel ? selectedModel.path : '未选择模型') + '</div>' +
+        '<div class="mode-caption" id="asr-model-path">' + A.esc(selectedModel ? selectedModel.path : '把语音模型文件夹放进程序目录的 模型/语音/ 下，会自动识别') + '</div>' +
         '<div class="model-row">' +
         '<span class="model-label">闲置退出</span>' +
         '<select class="select" id="asr-idle-exit">' + optionList(IDLE_EXIT_OPTIONS, idleExit) + '</select>' +
@@ -184,7 +184,7 @@
        }
        function showModelPath() {
          const item = modelItems.find(function (m) { return m.id === modelSelect.value; });
-         A.qs('#asr-model-path', root).textContent = item ? item.path : '未选择模型';
+         A.qs('#asr-model-path', root).textContent = item ? item.path : '把语音模型文件夹放进程序目录的 模型/语音/ 下，会自动识别';
        }
        A.bridge.on('model-folders-changed',function (msg) {
          if (modelSelect.isConnected) updateModels(msg.asr,true);

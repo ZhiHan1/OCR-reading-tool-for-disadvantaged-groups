@@ -100,11 +100,14 @@ class OCREngine:
         ]:
             configured=self.config.get('ocr',key,default='')
             path=resolve_path(configured) if configured else resolve_path('models/ocr/'+filename)
-            # 部署配置可能来自另一台机器；本地自定义路径失效时安全回退到
-            # 当前便携包随附的通用 OCR 推理权重。
+            # 部署配置可能来自另一台机器；自定义路径失效时回退到 EXE 同级
+            # models/ocr。发布版不带任何权重（.spec 的 no_weights 会剥掉
+            # rapidocr/models），所以这里**不做包内回退**——缺文件就明确报错，
+            # 否则用开发机 site-packages 里的副本「假装能用」，发布版才炸。
             if not path.is_file():path=resolve_path('models/ocr/'+filename)
             if not path.is_file():
-                raise FileNotFoundError(f'OCR 模型文件不存在：{path}')
+                raise FileNotFoundError(
+                    f'OCR 模型文件不存在：{path}（请把 {filename} 放到程序目录的 models/ocr/ 下）')
             params[component + '.model_path'] = str(path)
         if not self.use_angle_cls:
             params["Global.use_cls"] = False
@@ -365,31 +368,3 @@ class OCREngine:
 
         return np.array(centers)
 
-    def _get_center_y_x(self, box):
-        """
-        获取文本框的中心坐标 (y, x) - 保留用于兼容性
-
-        Args:
-            box: 4个角点 [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-
-        Returns:
-            (center_y, center_x)
-        """
-        try:
-            if isinstance(box, (list, tuple)) or hasattr(box, '__len__'):
-                if len(box) >= 4:
-                    # 使用NumPy计算
-                    points = np.array([
-                        [float(point[0]), float(point[1])]
-                        for point in box[:4]
-                        if len(point) >= 2
-                    ])
-
-                    if len(points) > 0:
-                        center_x = np.mean(points[:, 0])
-                        center_y = np.mean(points[:, 1])
-                        return (center_y, center_x)
-        except (IndexError, TypeError, ValueError):
-            pass
-
-        return (999999.0, 999999.0)

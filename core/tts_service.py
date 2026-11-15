@@ -112,7 +112,3 @@ class TTSService:
         """获取中文在线语音列表"""
         return edge_tts_backend.get_voices()
 
-    @staticmethod
-    def is_edge_available():
-        """在线语音是否可用（edge-tts 是否已安装）"""
-        return edge_tts_backend.is_available()

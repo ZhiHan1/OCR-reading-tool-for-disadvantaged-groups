@@ -1,7 +1,6 @@
 # OCR 文字朗读工具 - 运行依赖
 # 安装：pip install -r requirements.txt
-customtkinter>=5.2.0
-# Qt UI（新 qt_main.py；旧 customtkinter UI 暂保留作回退参考）
+# Qt UI（唯一界面：qt_web）
 PySide6>=6.7.0
 Pillow>=10.0.0
 rapidocr>=3.9.2
@@ -23,8 +22,6 @@ sounddevice>=0.4.6
 # funasr：阿里达摩院本地语音识别（SenseVoice / Paraformer 模型）
 # 首次识别时才下载模型，体积较大，可选安装
 funasr>=1.0.0
-# pynput：识别结果直接输入到当前光标处（键盘模拟）
-pynput>=1.7.6
 
 # 本地 GGUF 翻译模型（HY-MT1.5）依赖，较大，可选安装
 # 若仅使用在线翻译/OPUS-MT 后端，可注释掉以下两行

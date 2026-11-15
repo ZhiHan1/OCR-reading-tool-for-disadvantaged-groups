@@ -3,7 +3,7 @@
 > 本目录是 OCR 朗读工具项目的**长期维护知识库**，供人和 Codex 检索引用。
 > 所有路径相对项目根目录；所有文件为 UTF-8（无 BOM）。
 > 条目 ID 规则：`KB-<域>-<三位序号>`，域见下表。引用时写 ID + 文件 + 小节，
-> 例如「见 KB-SEL-003（screenshot-selector.md §3.2）」。
+> 例如「见 KB-SEL-003（screenshot-selector.md §4）」。
 
 ## 一、怎么用这份知识库
 
@@ -21,12 +21,20 @@
 | 某个 `do_xxx` 干什么、返回什么 | `backend-api.md` |
 | 框选 / 多屏 / 混合 DPI 问题 | `screenshot-selector.md` |
 | 语音识别漏字、幻听、模式 | `asr.md` §1–8 |
+| 休眠唤醒后语音「未检测到说话」/ 麦克风没声音 | `asr.md` §7.2（KB-ASR-012） |
+| 发布包为什么这么大 / 想缩体积 / 哪些 DLL 能删 | `performance.md` §13（KB-PERF-013，2026-11-15 最新账单） |
+| CUDA 到底有没有在用、`gpu_runtime` 里哪些文件能删 | `performance.md` §11（KB-PERF-011） |
 | 要不要把模型量化成 INT8 ONNX、能省多少、会丢什么 | `asr.md` §8（KB-ASR-008/009，本机实测） |
 | 识别错了专有名词，怎么加/排查热词 | `asr.md` §9.8（KB-ASR-010）+ `core/hotwords.py` |
 | 业界（微信/豆包/输入法）用什么方案、我们差在哪 | `asr.md` §9（KB-ASR-007，外部调研） |
 | 翻译怎么调参、为什么翻错、能不能用 GPU | `translation.md`（KB-TR-001~006） |
 | 内存占用、启动速度、线程数 | `performance.md` |
-| 发布包为什么这么大、哪些 DLL 能删、CUDA 到底有没有在用 | `performance.md` §11（KB-PERF-011） |
+| 发布包为什么这么大 / 想缩体积 | `performance.md` §13（KB-PERF-013，2026-11-15 最新账单） |
+| CUDA 到底有没有在用、`gpu_runtime` 里哪些文件能删 | `performance.md` §11（KB-PERF-011） |
+| 模型放哪个文件夹、为什么不进安装包、换盘符会不会失效 | `gotchas.md` §9（KB-GOT-012） |
+| 改了代码/测试「没生效」、反向验证结果自相矛盾 | `gotchas.md` §6.2.1（KB-GOT-013，先清 `__pycache__`） |
+| 删了一个方法/接口，怎么确认没有漏掉的调用方 | `gotchas.md` §6.2.2（KB-GOT-014，打包自检是测试死角） |
+| 哪个 Qt DLL 能删、`opengl32sw`/`cufft`/`cv2` 为什么必须留 | `performance.md` §13（KB-PERF-013）+ `WEB_RELEASE.md` |
 | 「这里为什么这么写，看着像 Bug」 | `gotchas.md`（默认答案：不是 Bug） |
 
 ## 二、文档清单
@@ -108,6 +116,7 @@
 | KB-ASR-009 | SenseVoice-Small 量化对比（CTC 解码、中文路径坑、体积几乎相同） | asr.md §8.10 |
 | KB-ASR-010 | 热词已实施：L1 文本层（三个坑、0.80 阈值、能力边界） | asr.md §9.8 |
 | KB-ASR-011 | 麦克风设备选择：按名字、四套 host API 归并、启动枚举 + 手动刷新、失败不回退 | asr.md §10 |
+| KB-ASR-012 | 休眠唤醒后「未检测到说话」：PortAudio 设备表固化、电源事件重建、静音自检 | asr.md §7.2 |
 
 ### PERF · 性能
 
@@ -124,6 +133,8 @@
 | KB-PERF-009 | 代码精简：删 `legacy/`（−8145 行）、合并三个下载脚本、归档 4 份根目录文档；哪些「无 import」模块其实在用；UI 层 3 套→1 套（再删 1739 行）；`smoke_gui` `radios` 假阴性 | performance.md §10 |
 | KB-PERF-010 | 后端整体审查：去重（base_controller、`_read_stable_frames`、13 个 property、TTS 等待循环、翻译后端表）、`CSafeLoader` 快 7~8 倍、删 20 个无用 import；8 条 pyflakes 为何保留；全量回归结果 | performance.md §10.9 |
 | KB-PERF-011 | 发布包 CUDA 运行时裁剪：**不能用 torch 是 CPU 版推断 CUDA 没用**、必须用真实模型枚举已加载 DLL、删 5 个省 354 MB、`stage_gpu_runtime.py` 白名单化 | performance.md §11 |
+| KB-PERF-012 | 模型目录体检：`tools/model_audit.py` 四类结果、可删的缓存/`.bak`/空目录、`models/ocr` 与 rapidocr 包内 30.3 MB 重复副本、`do_*`/`_make_*` 动态分发的粗筛陷阱 | performance.md §12 |
+| KB-PERF-013 | 发布包体积账单与瘦身：CUDA 不能瞎删、torch 无法移除、PySide6 按 DLL 依赖闭包裁剪（449→305 MiB）、`opengl32sw` 必须留、`sklearn/numba/llvmlite` 可去、`cv2` 不能去 | performance.md §13 |
 
 ### TR · 翻译
 
@@ -151,6 +162,9 @@
 | KB-GOT-009 | 动画 bug 的三帧采样法（起始必须是旧页） | gotchas.md §6.5 |
 | KB-GOT-010 | 仓库与 Git：远程地址、不入库清单、dubious ownership、代理 | gotchas.md §10 |
 | KB-GOT-011 | 提交信息绝不能带 BOM（PowerShell `-Encoding utf8` 陷阱） | gotchas.md §10.4 |
+| KB-GOT-012 | 权重完全外置：模型在 EXE 同级 `模型/`+`models/`、按 `sys.executable` 解析、打包只出程序本体、启动检测与 `models-missing` 推送 | gotchas.md §9 |
+| KB-GOT-013 | 反向验证必须清 `__pycache__`：同秒 mtime 会复用坏字节码，导致「已还原却仍报错」 | gotchas.md §6.2.1 |
+| KB-GOT-014 | 删方法要全局搜调用方：`release_gui_check.py` 是测试死角，单元测试全绿但打包才炸 | gotchas.md §6.2.2 |
 
 ## 四、维护约定
 

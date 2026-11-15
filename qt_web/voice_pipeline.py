@@ -21,6 +21,11 @@ class LiveCapture(AudioCapture):
         self.notify_level = notify_level
         self.overflow = False
         self.last_level = 0.0
+        # 静音自检用：记录本次录音中出现过的最大 RMS 与已采集采样数。
+        # 光看某一帧为 0 没有意义（人说话之间本来就有停顿），必须看
+        # 「一整段时间内有没有出现过任何声音」。
+        self.peak_rms = 0.0
+        self.samples = 0
 
     def _callback(self, indata, frames, time_info, status):
         if status.input_overflow:
@@ -29,11 +34,24 @@ class LiveCapture(AudioCapture):
             self.frames.put_nowait(indata[:, 0].copy())
         except queue.Full:
             self.overflow = True
+        rms = float(np.sqrt(np.mean(np.square(indata))))
+        self.peak_rms = max(self.peak_rms, rms)
+        self.samples += len(indata)
         now = time.monotonic()
         if now - self.last_level >= 0.033:
             self.last_level = now
-            rms = float(np.sqrt(np.mean(np.square(indata))))
             self.notify_level(min(1.0, rms * 12.0))
+
+    def silent_for(self, seconds):
+        """已采集满指定秒数，且整段时间的电平始终低于「绝对静音」阈值。
+
+        阈值取得很低（-60 dBFS 量级），只用来抓「设备根本没在出声音」
+        （休眠唤醒后端点失效、麦克风被物理静音、驱动重置），
+        不会把「用户只是还没开口」误判成故障。
+        """
+        if self.samples < self.sample_rate * seconds:
+            return False
+        return self.peak_rms < 0.001
 
 
 class AudioWindow:
@@ -60,6 +78,11 @@ class VoicePipeline:
     # FSMN-VAD 的起点通常比真实发声晚 100~300ms，直接按 VAD 起点切片会吞掉
     # 第一个字（例如「你好」的「你」）。这里统一向前多留 300ms 作为前滚。
     PREROLL_MS = 300
+
+    # 静音自检窗口：连续这么多秒采集到的电平都低于「绝对静音」阈值，
+    # 判定为设备没在出声音（而不是用户没开口）。取 5 秒是因为人正常呼吸/
+    # 环境底噪都会产生 > -60 dBFS 的电平；真静音只可能是设备侧问题。
+    SILENCE_CHECK_SECONDS = 5.0
 
     def __init__(self, send):
         self.send = send
@@ -197,6 +220,16 @@ class VoicePipeline:
         if self.active:
             if self.capture.overflow:
                 raise RuntimeError('音频缓冲溢出，已停止以避免丢字；请减少系统负载')
+            # 静音自检：录音流开了却一直没任何电平，说明设备在「假工作」。
+            # 最常见原因是电脑休眠唤醒后 PortAudio 设备表过期——唤醒事件
+            # 会重启工作进程，但若事件丢失仍需这里兜底，给出可操作的提示，
+            # 而不是 15 秒后含糊地说「未检测到说话」。
+            if self.capture.silent_for(self.SILENCE_CHECK_SECONDS):
+                raise RuntimeError(
+                    '麦克风没有声音：录音已打开但一直采集到静音。'
+                    '常见原因是电脑休眠唤醒后音频设备失效，'
+                    '请重新插拔麦克风，或在语音页点「刷新」后重新开始；'
+                    '若仍无效请重启本软件')
             # 保留最后一个非空块，在 stop 时用 is_final=True 只提交一次。
             for _ in range(8):
                 try:

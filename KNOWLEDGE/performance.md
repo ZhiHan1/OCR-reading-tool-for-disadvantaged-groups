@@ -458,7 +458,7 @@ else run();                                // 只有首次进入才同步
 `{animate:false}` + `router.refresh()`。教训：改冒烟脚本时，
 要同时搜所有 `runJavaScript` 调用点，不要只改 `tools/smoke_gui.py`。
 
-### 10.9 后端整体审查与压缩（2026-11-05，第三批）
+### 10.9 后端整体审查与压缩（KB-PERF-010，2026-11-05，第三批）
 
 用户要求「对整个后端代码检查，看有什么可以压缩和优化」。用 pyflakes + 自写 AST
 重复块扫描过了一遍 `core/` `controllers/` `utils/` `qt_ui/` `qt_web/`（约 9700 行），
@@ -648,3 +648,337 @@ print(sess.get_providers())   # ['CUDAExecutionProvider', 'CPUExecutionProvider'
 
 **变更记录**：2026-11-15 CUDA 运行时白名单化，删 5 个未加载 DLL（354.0 MB），
 真实 OCR 模型 3/3 复验通过；`tools/stage_gpu_runtime.py` 改精确清单。
+
+---
+
+## 12. 模型目录体检与冗余清单（KB-PERF-012）
+
+`tools/model_audit.py` 只读扫描，给出「必需 / 多余 / 重复 / 缺失」四类结果：
+
+```powershell
+py -3.14 tools\model_audit.py            # 项目根目录
+py -3.14 tools\model_audit.py dist\Web-xxxx\OCR_Reader_Web   # 发布目录
+```
+
+2026-11-15 在本机项目根目录的实测结果：
+
+| 类别 | 内容 | 体积 | 处置 |
+| --- | --- | --- | --- |
+| 必需 | `模型/语音/paraformer-large`、`models/asr/{fsmn-vad,ct-punc}`、`models/ocr/*.onnx`、`模型/翻译/*.gguf` | 2325.8 MB | 保留 |
+| 多余 | `模型/语音/paraformer-large/.cache`、`models/asr/fsmn-vad/.cache`（HuggingFace 下载残留） | ≈0（12+6 个元数据文件） | **已删**（2026-11-15） |
+| 多余 | `models/asr/registry.json.bak` | 298 B | **已删**（指向已不存在的 SenseVoiceSmall） |
+| 空目录 | `models/LocalSubs/`、`models/Qwen2.5/` | 0 | **已删** |
+| 重复 | `models/ocr/*.onnx` 与 `site-packages/rapidocr/models/` 同名同大小 | 30.3 MB | **保留，不要删** |
+| 状态文件 | `models/asr/registry.json`、`models/asr/hotword_candidates.json`、`models/local/models_config.json` | < 2 KB | 运行时生成，不必分发 |
+
+**为什么 `models/ocr` 不能删（重要纠正）**：`OCR_Reader_Web.spec` 的 `no_weights()`
+会剥掉 `rapidocr/models/`，所以**发布版里没有包内副本**，`models/ocr` 是唯一来源。
+曾经一度让 `core/ocr_engine.py` 回退到包内副本，那会「开发机通过、发布版崩」，
+已改回只认外置目录，缺文件直接抛 `FileNotFoundError` 并提示放到 `程序目录/models/ocr/`。
+守门测试：`test_falls_back_to_external_models_folder`、`test_missing_models_raise_clear_error`。
+
+### 冗余代码候选（粗筛结果，未删除）
+
+结构化粗筛只能定「零文本引用」，本项目有两类动态引用，必须人工排除：
+
+- `do_<action>`：唯一派发点是 `qt_web/api.py` 的 `getattr(self, "do_" + action)`
+- `_make_<name>`：`controllers/app_controller.py` 的 `getattr(self, "_make_" + name)`，
+  name 来自 `LAZY_MEMBERS`
+
+排除这两类、并与 `qt_web/web/**.js|html` 交叉比对后，2026-11-15 的 5 个死接口已全部删除：
+`do_hotwords_clear_candidates`、`do_set_ocr_device`、`do_save_config`（见下方清单），
+以及两个语音模型手工接口（见下一节）。前端共调用 52 个动作，后端 handler 从 59 降到 54。
+
+### 2026-11-15 已删除的语音模型手工接口
+
+`do_asr_import_model` / `do_asr_remove_model` 原本是「手工登记模型路径」的入口
+（弹选目录对话框 → `registry.add()` → 写 `config.yaml` 的 `asr.local_model`）。
+它们**前端从未被调用**：语音页只有「识别模型」下拉框，占位文案写着「请导入本地模型目录」，
+却从来没有导入按钮——是孤立接口。
+
+功能并未丢失：`ModelRegistry.scan()` 扫描 `模型/语音/` 下含 `config.yaml` + `model.pt`
+的完整模型目录，稳定两轮后自动登记；`WebApi.__init__` 启动即扫，
+`_model_scan_timer` 每 3s/30s 轮询。所以「把文件夹放进去就能用」已经覆盖了原设计意图。
+
+连带删除：`ModelRegistry.remove()`（只被移除接口调用）、`bridge.js` 里 `asr_import_model`
+的超时豁免条件。`do_pick_folder` **保留**（`tts.js:196` 仍在用）。
+
+前端文案同步改为「把语音模型文件夹放进程序目录的 模型/语音/ 下，会自动识别」。
+守门测试：`tests/test_external_models.py::AsrModelInterfaceTest`（5 项，
+已做反向验证——还原旧代码后其中 3 项 FAIL）。
+
+### 2026-11-15 已删除的其余死接口与残留模块
+
+| 项 | 原用途 | 为什么废 |
+| --- | --- | --- |
+| `do_hotwords_clear_candidates` | 清空热词候选池 | 前端从无按钮调用；用户只会「接受 / 忽略」单条 |
+| `do_set_ocr_device` | 切 OCR 的 cpu/cuda | 设备由 `core/device_manager.py` 自动选，前端不提供切换 |
+| `do_save_config` | 保存配置并立即生效 | 设置页统一走 `do_set_config`（逐项保存），批量保存没人用 |
+| `utils/hotkey.py` | 旧版全局热键实现（134 行） | 全仓库零导入，热键实际由 `qt_web/main.py` 用 `keyboard` 库实现 |
+
+**只删 handler，不删底层能力**：`core/hotword_learning.clear_candidates()` 仍被
+`tests/test_hotword_learning.py:131` 直接测试，予以保留；
+`ocr_service.reload_device()` 与 `_apply_current()` 都还有别的调用方。
+
+### 2026-11-15 已删除的死代码（共 364 行 + 2 个文件）
+
+用 `ast` 定位函数边界、按 UTF-8 无 BOM 字节级写回，每项先经引用核查确认
+「仅定义、零引用」，删除后全量测试 99 项通过、`tools/smoke_gui.py` ok。
+
+| 文件 | 删除内容 |
+| --- | --- |
+| `utils/screenshot.py` | `grab_all_screens()` |
+| `core/device_manager.py` | `get_ocr_device()`、`clear_cache()` |
+| `core/audio_player.py` | `estimate_audio_duration()` |
+| `core/edge_tts_backend.py` | `is_chinese_voice()` |
+| `core/history_manager.py` | `get_all_texts()`、`_find_common_prefix_length()` |
+| `core/hotword_learning.py` | `phonetic_variants()`、`mine_from_existing()` |
+| `core/model_manager.py` | `get_model_path()` |
+| `core/ocr_engine.py` | `_get_center_y_x()` |
+| `core/tts_service.py` | `is_edge_available()` |
+| `core/sapi_wav.py` | `synthesize_wav()` |
+| `controllers/scan_mode_controller.py` | `toggle()` |
+| `qt_web/release_check.py` | 整文件（入口已切到 `release_gui_check` / `release_worker_check`） |
+| `pyinstaller_hooks/hook-customtkinter.py` | 整文件（无任何 `import customtkinter`） |
+| `requirements.txt` | 移除 `customtkinter`、`pynput`（后者实际用 ctypes `SendInput`） |
+| `OCR_Reader_Web.spec` | excludes 移除 `customtkinter` |
+
+**`utils/hotkey.py` 未删但已是死代码**：全仓库无任何导入，热键实际由
+`qt_web/main.py` 用 `keyboard` 库实现。保留是因为它无副作用；要删可整体移除 134 行。
+
+**不要删 `translate_batch`**：`core/translation_service.py:339` 的版本被
+`:358` 真实调用，各模型的 `translate_batch` 是基类抽象方法体系的一部分。
+
+备份：`.cache/cleanup_backup/`（16 个原始文件，已被 `.gitignore` 覆盖）。
+
+### 权重后缀检查的两个坑（2026-11-15 实际踩到）
+
+1. **`.bin` 不能一刀切**：`_internal/PySide6/resources/v8_context_snapshot.bin`
+   与 `_internal/chardet/models/*.bin` 都是运行库。第一版 `check_weights()` 把它们
+   当成权重，结果是「装了 PySide6 就永远打包失败」。现在按路径前缀
+   `NON_MODEL_BINS` 排除（`build_web.py`），`verify_web_release.py` 同步处理。
+2. **`set |=` 而不是 `set +=`**：合并排除前缀时写成 `skip += {...}` 会抛
+   `TypeError: unsupported operand type(s) for +=: 'set' and 'set'`，
+   守门测试 `test_build_web_ignores_runtime_bins` 立刻抓到了。
+
+## 13. 发布包体积账单与瘦身（KB-PERF-013）
+
+**先纠正一个流传过的错误说法**：模型外置后「体积从 5.15 降到 3.6 GiB」是错的。
+实测 4.45 GiB，其中**模型只占约 0.9 GiB**，从来不是主要部分。
+
+2026-11-15 的完整体积构成（`dist/Web-20261115-143041`，4.45 GiB）：
+
+| 项目 | 体积 | 性质 | 处置 |
+| --- | --- | --- | --- |
+| `gpu_runtime/`（CUDA） | 1.80 GiB | 可选 | 保留（GPU 是可选项，有显卡就该能用） |
+| `PySide6/` | 449 MiB | 必需 | **已瘦身到 ~305 MiB** |
+| `torch/` | 373 MiB | 必需 | 保留 |
+| `onnxruntime/` | 328 MiB | 必需 | 保留（含 298 MiB 的 CUDA EP） |
+| `llvmlite/` | 115 MiB | 可删 | **已排除** |
+| `cv2/` | 112 MiB | 必需 | 保留 |
+| 模型（外置） | ~920 MiB | 外置 | 不随包分发 |
+
+### 13.1 CUDA 不能瞎删（实测结论）
+
+`gpu_runtime/` 单个文件就很大：`cublasLt64_12.dll` 638 MiB、
+`cudnn_engines_precompiled64_9.dll` 504 MiB、`cufft64_11.dll` 274 MiB。
+
+曾想把 `cufft`（傅里叶变换，OCR/ASR 用不到）删掉省 274 MiB，
+但实测它是**多处硬引用**：
+
+- `onnxruntime/capi/onnxruntime_providers_cuda.dll`（CUDA EP 加载时解析导入）
+- `torch/lib/torch_cpu.dll`、`torch/lib/torch_python.dll`
+
+删了会让 GPU 推理在**运行期**崩（不是启动期，很难发现）。已写成守门测试
+`test_cufft_not_stripped`，防止后来者「优化」掉。`onnxruntime_providers_cuda.dll`
+同理保留。
+
+### 13.2 torch 无法移除（实测 922 个模块）
+
+`import funasr` 会**强制拉起 922 个 torch 模块**（`funasr` → `torch` 是硬依赖，
+不是可选）。项目代码里没有任何直接 `import torch`，但这没有意义——
+只要用 funasr 就必须带 torch。
+
+### 13.3 PySide6 瘦身：按 DLL 依赖闭包裁剪
+
+PyInstaller 的 PySide6 hook 会把**整个 Qt 安装目录**收进来。实际界面只用
+`QtWebEngineWidgets` + `QtWebChannel` + `Widgets`，却连 3D、图表、PDF、
+虚拟键盘、各种 Quick 控件样式都带上了。
+
+**推导方式**（`_qt_deps.py` 的原始思路）：读每个 DLL 的 PE 导入表，
+从 `qt6webenginecore` / `qt6webenginewidgets` / `qt6core` / `qt6gui` /
+`qt6widgets` 出发做可达闭包。137 个 DLL 里 **114 个不可达，共 79 MiB**。
+
+`OCR_Reader_Web.spec` 的 `no_weights()` 里用 `_QT_KEEP` 白名单保留 22 个：
+
+```
+Qt6WebEngineCore / WebEngineWidgets / WebEngineQuick / Core / Gui / Widgets /
+WebChannel / Network / Qml / QmlModels / QmlMeta / QmlWorkerScript / Quick /
+QuickWidgets / OpenGL / OpenGLWidgets / Positioning / PrintSupport / Svg /
+Concurrent / pyside6.abi3 / opengl32sw
+```
+
+**`opengl32sw.dll` 必须留**：它不在导入表里，是 `qt6gui` 的隐式软件 OpenGL
+回退，删了会让无显卡 / 远程桌面环境黑屏。这是纯静态分析抓不到的坑。
+
+另外三项：
+
+| 内容 | 体积 | 为什么能删 |
+| --- | --- | --- |
+| `translations/*.pak`（除中英文） | ~50 MiB | Chromium 本地化包，216 → 4 个（`zh-CN/zh-TW/en-US/en-GB`） |
+| `translations/*.qm`（全部） | ~3 MiB | 程序**从未安装任何 `QTranslator`**，Qt 自身翻译永不加载 |
+| `resources/qtwebengine_devtools_resources.pak` | 11 MiB | 开发者工具（F12）资源，发布版不开 Inspector |
+
+合计 PySide6 从 449 MiB 降到约 305 MiB（**省 143.5 MiB**）。
+
+### 13.4 funasr 的评测依赖不进 worker
+
+`sklearn` / `numba` / `llvmlite` 在 funasr 里只出现在三条路径：
+
+| 文件 | 用途 |
+| --- | --- |
+| `metrics/compute_eer.py` | `sklearn.metrics.roc_curve`，评测 EER |
+| `models/campplus/cluster_backend.py` | 声纹聚类后端 |
+| `models/sense_voice/whisper_lib/timing.py` | 语音分离分词的计时（numba） |
+
+本项目只做 ASR 推理，三条都不走。spec 里用 `_ASR_ONLY_EXCLUDES` 排除，
+**省约 127 MiB**（sklearn 12 + llvmlite 115）。
+
+**验证方式**：用 `sys.meta_path` 装一个拦截器，在导入阶段直接 raise
+ImportError 模拟 excludes，然后实测 `AutoModel` 仍能加载 `paraformer-large`
+并正常推理——不是看代码猜的。
+
+### 13.5 `cv2` 不能删（实测）
+
+项目零直接 `import cv2`，看着像可以删，但 `RapidOCR()` **初始化时就会**
+`import cv2`（rapidocr 有 10 个文件引用它）。屏蔽后实测直接抛
+`ImportError`，OCR 完全不可用。已保留。
+
+### 13.6 工具、方法与守门
+
+| 工具 | 用途 |
+| --- | --- |
+| `tools/model_audit.py` | 模型目录体检（必需/多余/重复/缺失） |
+| `tools/sync_external_models.py` | 把模型同步到发布目录（`--sync-models` 用） |
+| `tools/stage_external_models.py` | 写 `external-models-manifest.json` |
+| `tests/test_package_size.py` | 16 项静态守门，不需要跑完整打包 |
+
+#### 13.6.1 怎么定位「包为什么这么大」
+
+按体积倒序列出比猜测有效得多：
+
+```python
+entries = sorted(INTERNAL.iterdir(), key=lambda p: -size_of(p))
+files = sorted(((f.stat().st_size, f) for f in INTERNAL.rglob('*') if f.is_file()),
+               reverse=True)[:20]
+```
+
+先看顶层目录，再看单个文件 Top 20。这次正是靠它发现
+`cublasLt64_12.dll` 一个文件就 638 MiB。
+
+#### 13.6.2 判断「某个 DLL 能不能删」的正确方法
+
+不能靠「项目代码有没有 import 它」，因为依赖链在第三方库里。三档方法，
+可靠性递增：
+
+| 方法 | 能发现 | 会漏掉 |
+| --- | --- | --- |
+| 看项目 `import` | 直接依赖 | 第三方间接依赖（`cv2` 被漏过） |
+| 读 PE 导入表做闭包 | 静态链接依赖 | **隐式加载**（`opengl32sw` 被漏过） |
+| 真实运行 + 枚举已加载模块 | 全部 | 只在特定分支才加载的（需覆盖到） |
+
+本次三者都用上了：静态闭包砍掉 114 个 DLL，但 `opengl32sw.dll` 是
+`Qt6Gui` 的**隐式**软件 OpenGL 回退（不写进导入表），纯静态分析必然误删，
+所以它被单独手工加回白名单。
+
+PE 导入表的读法（纯标准库，无需 pefile）：
+
+```python
+pe = struct.unpack_from('<I', data, 0x3C)[0]      # e_lfanew
+opt = pe + 24
+magic = struct.unpack_from('<H', data, opt)[0]    # 0x20B = PE32+
+dd = opt + (112 if magic == 0x20B else 96)
+imp_rva, _ = struct.unpack_from('<II', data, dd + 8)   # 导入表 RVA
+# 再用节表把 RVA 换算成文件偏移，逐项读 name_rva 指向的 DLL 名
+```
+
+#### 13.6.3 验证「排除之后还能不能用」：meta_path 拦截器
+
+改 spec 的 excludes 后再打包（10 分钟）才知道结果，太慢。可以在**开发环境**
+里用导入钩子模拟同样的效果：
+
+```python
+class Blocker:
+    BLOCKED = {'sklearn', 'numba', 'llvmlite'}
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in self.BLOCKED:
+            raise ImportError(f'{fullname} 已被排除')
+sys.meta_path.insert(0, Blocker())
+```
+
+然后照常 `from funasr import AutoModel` → 加载真实模型 → `generate()`。
+`sklearn`/`numba`/`llvmlite` 用这个方法验证通过；`cv2` 用同样方法立刻暴露
+`ImportError`，省下一次 10 分钟的打包。
+
+#### 13.6.4 体积数字的两个陷阱
+
+1. **`release-test.json` 的 `size_bytes.total` 不等于最终目录大小**。
+   它统计的是打包中段的状态（含尚未同步的外置模型副本），本次显示
+   4.48 GiB，而最终目录实际是 4.18 GiB。要看真实值就自己遍历去重：
+
+   ```python
+   seen = set()
+   for f in release.rglob('*'):
+       if f.is_file():
+           st = f.stat()
+           if (st.st_dev, st.st_ino) in seen:   # 硬链接去重
+               continue
+           seen.add((st.st_dev, st.st_ino))
+           real += st.st_size
+   ```
+
+2. **要区分「含模型」和「不含模型」**。本次不含模型 3.28 GiB、
+   含模型 4.18 GiB，讨论「程序本体多大」时必须说清是哪一个。
+
+#### 13.6.5 实测结果
+
+打包 `dist/Web-20261115-160022`，自检 **25/25 通过**，`stray_weights` 为空：
+
+| 项目 | 瘦身前 | 瘦身后 |
+| --- | --- | --- |
+| PySide6 | 449 MiB | **305 MiB** |
+| `llvmlite`/`numba`/`sklearn` | 127 MiB | **0** |
+| PySide6 DLL 个数 | 137 | 28（含 VC 运行库等非 Qt 文件） |
+| `translations/*.pak` | 216 个 | 4 个 |
+| 总体积（含模型） | 4.45 GiB | **4.18 GiB** |
+| 程序本体（不含模型） | 3.56 GiB | **3.28 GiB** |
+
+关键自检项确认功能未受影响：`gui` 7 个页面全部渲染、
+`worker_inference` 通过、**GPU 推理实测走 `CUDAExecutionProvider`**、
+OCR 真跑出 `OCR TEST 123`、外置模型加载与推理正常。
+
+#### 13.6.6 还剩什么（想再缩可以考虑）
+
+| 方向 | 可省 | 代价 |
+| --- | --- | --- |
+| 去 CUDA（做 CPU 精简版） | ~2.0 GiB | GPU 推理不可用，OCR 变慢 |
+| CUDA 改为首次启动下载 | ~1.8 GiB | 需联网与下载逻辑 |
+| 继续啃 PySide6 | < 50 MiB | 收益递减，且 `Qt6WebEngineCore` 194 MiB 是刚性的 |
+
+**不建议动的**：`torch`（funasr 硬依赖）、`onnxruntime`（推理后端）、
+`cv2`（OCR 初始化必需）、`Qt6WebEngineCore`（整个界面就是它）。
+
+守门测试 `tests/test_package_size.py`（16 项）静态检查 spec，不需要跑完整
+打包就能发现问题：权重不进包、WebEngine 必需项保留、`opengl32sw` 保留、
+3D/图表/PDF 被剔除、语言包只剩中英文、`_ASR_ONLY_EXCLUDES` 声明、
+`funasr`/`torch`/`cufft`/CUDA EP 不被误删。
+
+**反向验证**（10 种破坏方式全部被抓住）：去掉权重过滤、删 `opengl32sw` 保留项、
+删 WebChannel 保留项、放行所有 Qt DLL、放行所有语言包、放行 `.qm`、
+放行 devtools 资源、worker 不排除 sklearn、误把 funasr 也排除、误删 cufft。
+
+
+另外 `tools/sync_external_models.py` 的 `sync()` 返回值契约是
+`copied_files / copied_bytes / registry / models`，`build_web.py` 依赖它；
+改返回值时 `test_sync_returns_documented_keys` 会失败。
+

@@ -352,57 +352,6 @@ _CONFUSABLE = {
 _NASAL = (("in", "ing"), ("an", "ang"), ("en", "eng"), ("uan", "uang"))
 
 
-def phonetic_variants(word: str, limit: int = 3) -> List[str]:
-    """为一个中文词生成「可能被听成」的变体，用于提前放进候选池。
-
-    **重要**：这个函数生成的是 potential 错法（wrong 侧），
-    但它无法凭空知道正确写法，所以只用于提示用户「这个词容易被听错，
-    要不要提前加显式映射」。因此返回的是拼音串，而不是汉字。
-
-    返回：交替混淆后的拼音串列表（不含原串）。
-    """
-    py = _pinyin_key(word)
-    if not py or len(word) < 2:
-        return []
-
-    results: List[str] = []
-
-    # 1) 声母混淆（每处单独替换，不叠加，避免组合爆炸）
-    for i, ch in enumerate(py):
-        for src, dst in _CONFUSABLE.items():
-            if not py.startswith(src, i):
-                continue
-            cand = py[:i] + dst + py[i + len(src):]
-            if cand != py and cand not in results:
-                results.append(cand)
-            break
-
-    # 2) 前后鼻音
-    for a, b in _NASAL:
-        if a in py:
-            cand = py.replace(a, b, 1)
-            if cand not in results:
-                results.append(cand)
-
-    return results[:limit]
-
-
-def mine_from_existing(hotwords: Sequence[str]) -> List[Tuple[str, str]]:
-    """从现有词表挖掘「易错变体」，生成候选。
-
-    策略（保守，宁缺毋滥）：
-    - 只处理 3 字及以上的中文词；
-    - 找同一拼音串的其它词（同音不同字），提示用户确认；
-    - 不自动构造汉字（无法保证语义）。
-
-    返回 (wrong, right) 对；wrong 侧留空表示「需要用户填写实际错法」。
-
-    说明：由于无法凭空生成可信的汉字错法，这里**只做同音冲突检测**，
-    真正可用的变体仍需用户确认。返回空列表是正常结果。
-    """
-    return []
-
-
 # ---------------------------------------------------------------- 批量导入
 
 

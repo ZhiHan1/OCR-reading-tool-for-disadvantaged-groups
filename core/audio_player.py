@@ -173,26 +173,3 @@ def estimate_duration(byte_count: int) -> float:
     return max(0.0, byte_count * 8.0 / _MP3_BITRATE_BPS)
 
 
-def estimate_audio_duration(audio_bytes) -> float:
-    """估算音频字节的播放时长（秒）
-
-    WAV 直接读文件头（精确）；MP3 按固定 48 kbps 估算
-    （在线语音与 lameenc 转码都用这个码率）。
-    """
-    if (
-        len(audio_bytes) >= 12
-        and audio_bytes[:4] == b"RIFF"
-        and audio_bytes[8:12] == b"WAVE"
-    ):
-        try:
-            import io
-            import wave
-
-            with wave.open(io.BytesIO(audio_bytes), "rb") as w:
-                rate = w.getframerate() or 0
-                if rate:
-                    return max(0.0, w.getnframes() / float(rate))
-        except Exception:
-            pass
-
-    return estimate_duration(len(audio_bytes or b""))

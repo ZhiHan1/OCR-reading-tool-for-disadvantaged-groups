@@ -59,11 +59,6 @@ def is_available() -> bool:
     return _available_cache
 
 
-def is_chinese_voice(name: str) -> bool:
-    """给定的短名称是否是本模块支持的中文语音"""
-    return str(name or "") in _VOICE_NAMES
-
-
 def get_voices():
     """返回中文语音列表（副本，避免调用方改动内部常量）"""
     return [dict(v) for v in EDGE_VOICES]

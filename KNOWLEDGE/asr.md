@@ -143,6 +143,105 @@ elif idle_exit and pipeline.is_idle():
   改下拉无需重启语音子进程；读盘失败或值非法时保留旧值，不会误退出。
 - 注意：`_build_state()` 的 `asr` 字段已包含 `idle_exit_seconds`，前端直接显示。
 
+## 7.2 休眠唤醒后「未检测到说话」（KB-ASR-012）
+
+**症状**：电脑休眠（或睡眠）后唤醒，按住说话，界面过一会儿显示
+「未检测到说话，已暂停」。重试无效，**只有重启软件才恢复**。
+
+**根因**：PortAudio 只在**导入 sounddevice 的那一刻**调用一次
+`Pa_Initialize()`，设备表从此固化。Windows 休眠会卸载/复位音频驱动，
+唤醒后端点重新枚举（索引可能整体平移，或指向已失效端点），
+而 PortAudio 不会自动重建这张表。
+
+于是录音流**能正常打开**（`InputStream.start()` 返回成功），但采到的是
+**纯静音**。VAD 检测不到语音，15 秒后 `TurnDetector` 判定
+「未检测到说话，已暂停」——提示里完全没有「麦克风没声音」这个真实原因。
+
+`sounddevice` **没有**提供公开的重新初始化接口，所以唯一可靠的恢复手段是
+**让语音工作进程重启**（独立进程，重启即重新 `Pa_Initialize()`）。
+
+**三层防护**（2026-11-15 实现）：
+
+| 层 | 位置 | 做法 |
+| --- | --- | --- |
+| ① 电源事件 | `qt_web/power_monitor.py` | 主窗口 `nativeEvent` 收 `WM_POWERBROADCAST`，`PBT_APMRESUME*` 时重启工作进程 |
+| ② 静音自检 | `qt_web/voice_pipeline.py::LiveCapture.silent_for()` | 连续 5 秒电平 < -60 dBFS 判定设备无声音，报可操作错误 |
+| ③ 延迟重连 | `VoiceSession._reconnect_if_pending()` | 唤醒时正录音则不打断，等回到 idle 补做 |
+
+**实现要点（都是踩过的坑）**：
+
+1. **PowerMonitor 不要对 `message` 做真值判断**。PySide6 传的是 `VoidPtr`，
+   `bool(VoidPtr(...))` 直接抛 `IndexError: VoidPtr does not have a size set`。
+   必须先 `int(message_ptr)` 转成地址，再判 `if not address`。
+2. **节流 3 秒**。Windows 一次唤醒常连发 `PBT_APMRESUMEAUTOMATIC` +
+   `PBT_APMRESUMESUSPEND`，不节流会连环重启。
+3. **计时用 `time.monotonic()`**，绝不能用 `time.time()`：休眠期间
+   `time.time()` 会跳变，可能减出负数。
+4. **静音阈值取 -60 dBFS（0.001）**，非常低。真实设备底噪通常
+   > -50 dBFS；取高了会把「用户只是还没开口」误判成故障。
+5. **只在实际采满 5 秒后才判定**，避免刚开口的几百毫秒被误报。
+6. **补做重连不能走 `_state('idle')`**，否则递归（`_state` 的 idle 分支
+   又会调 `_reconnect_if_pending`）。
+
+守门测试：`tests/test_sleep_resume.py`（11 项，含反向验证：改坏
+monotonic/消息号/静音检测后对应测试全部 FAIL）。
+
+**诊断命令**（怀疑麦克风坏了时）：用 `core/audio_capture.input_devices()`
+列设备，再逐后端开流看峰值——说话时 > 0.01 才算正常，恒为 0 说明
+设备侧无声音（物理静音 / 无线耳机休眠 / 隐私权限关闭）。
+
+### 7.2.1 同时存在的第二个故障：麦克风本身没在出声音
+
+排查休眠问题时实测发现，**本机当时还有另一个独立问题**，不要混为一谈：
+
+| 现象 | 实测数据 |
+| --- | --- |
+| HECATE G2 无线耳机（MME / DirectSound） | 流能打开，但**峰值恒为 0.0000** |
+| 同一设备走 WASAPI | 报 `-9997`（Invalid sample rate） |
+| 同一设备走 WDM-KS | 报 `-9996`（Device unavailable） |
+| 设备索引稳定性 | 90 秒间隔采样，索引无漂移 |
+
+也就是说：**索引没漂移、流也打开了，就是没信号**。这属于设备侧问题
+（耳机休眠 / 物理静音键 / 隐私权限 / 无线接收器断开），软件无法自救。
+
+**这与 KB-ASR-012 是两件事**，区分方法就是看新加的静音自检提示：
+
+- 报「**麦克风没有声音**…」→ 设备侧没信号，按上面四类原因查
+- 报了别的问题或仍显示「未检测到说话」→ 才是 PortAudio 设备表过期
+
+### 7.2.2 已排除的假设（不要重复排查）
+
+修复前逐条实测否掉的方向，避免后来者绕弯路：
+
+| 假设 | 实测结论 |
+| --- | --- |
+| 闲置退出导致工作进程没了 | `asr.idle_exit_seconds=0`（常驻），**不退出**，排除 |
+| QProcess 写入竞态丢指令 | 试了 4 种发送时机，**都能收到**，排除 |
+| COM STA / MTA 冲突导致录音失败 | `core/audio_capture.py` 用 MTA、`core/audio_endpoints.py` 用 STA，**实测不影响录音**，排除 |
+| 设备索引漂移 | 90 秒间隔采样，索引**稳定**，排除 |
+
+**结论**：`sounddevice` 没有公开的重新初始化接口，恢复手段只能是
+**重启语音工作进程**——这就是选择「电源事件触发进程重启」而非
+「进程内重连」的原因。
+
+### 7.2.3 验证方式：不真休眠也能测
+
+没有条件反复休眠时，用 `PostMessageW` 直接把 `WM_POWERBROADCAST`
+投递给窗口即可验证整条链路：
+
+```python
+user32.PostMessageW(wintypes.HWND(int(window.winId())), 0x0218,
+                    wintypes.WPARAM(0x0012), wintypes.LPARAM(0))
+```
+
+端到端应验证三个场景：
+
+1. **空闲时唤醒** → `process` 变 `None`，提示「系统已唤醒，麦克风已重新连接」
+2. **录音中唤醒** → `phase` 保持 `recording`（不打断），提示「本次录音结束后将重连麦克风」
+3. **唤醒后重建** → 新工作进程能正常 `_spawn()` 并处于 Running
+
+⚠ 场景 1 与 2 之间要**间隔 > 3 秒**，否则第二条会被节流吞掉，看起来像 bug。
+
 ## 8. 模型加载细节（`core/asr_service.py`）
 
 - 懒加载 + 线程锁，只加载一次。

@@ -13,13 +13,6 @@ _save_lock = threading.Lock()
 _SIGNATURE_SIZE = (128, 32)
 
 
-def grab_all_screens():
-    """
-    截取所有屏幕拼成的虚拟桌面。
-    """
-    return ImageGrab.grab(all_screens=True).convert("RGB")
-
-
 def grab_region(region):
     """
     截取指定全局坐标区域。
