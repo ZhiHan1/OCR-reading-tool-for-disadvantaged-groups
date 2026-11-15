@@ -13,6 +13,10 @@
 - ``_prepare_start()``    ：每次启动线程前的额外准备（如清空历史）
 - ``_on_region_selected()`` / ``_on_region_cleared()`` ：区域变化后的清理
 
+与 `base_controller.BaseController` 的关系：`_update_status` / `_show_result` /
+`_report_error` 三个回调直接继承，不再各写一份。扫描模式比一次性朗读多了
+后台线程、去重与运行状态通知，这些是这里独有的。
+
 注意：本基类不涉及 UI，回调都在后台线程中被调用，线程安全由主窗口负责。
 """
 import threading
@@ -21,11 +25,12 @@ from typing import Callable, Optional, Tuple
 
 from core.config_manager import get_config
 from utils.screenshot import frame_changed, frame_signature
+from controllers.base_controller import BaseController
 
 logger = logging.getLogger(__name__)
 
 
-class ScanModeController:
+class ScanModeController(BaseController):
     """扫描模式公共骨架（不可直接实例化）"""
 
     # 结果路由标识，与 ui/mixins/result_display.py 的 _RESULT_TARGETS 对应
@@ -46,9 +51,8 @@ class ScanModeController:
     CLEARED_STATUS = "区域已清除"
 
     def __init__(self, ocr_service, tts_service, screenshot_service):
-        self.ocr = ocr_service
-        self.tts = tts_service
-        self.screenshot = screenshot_service
+        # 回调属性的声明与 `on_status_update` / `on_result` 的初始值来自 BaseController
+        super().__init__(ocr_service, tts_service, screenshot_service)
 
         self.region: Optional[Tuple[int, int, int, int]] = None
         self.is_running = False
@@ -56,8 +60,6 @@ class ScanModeController:
         self.stop_event = threading.Event()
         self.worker_thread: Optional[threading.Thread] = None
 
-        self.on_status_update: Optional[Callable[[str], None]] = None
-        self.on_result: Optional[Callable[..., None]] = None
         self.on_state_changed: Optional[Callable[[bool], None]] = None
 
     # ===== 生命周期 =====
@@ -326,28 +328,12 @@ class ScanModeController:
         self.reselect()
 
     # ===== 回调 =====
-
-    def _update_status(self, status: str):
-        """更新状态栏"""
-        if self.on_status_update:
-            self.on_status_update(status)
+    #
+    # `_update_status` / `_show_result` / `_report_error` 继承自 BaseController，
+    # 不在此重复实现——三段曾与 `base_controller.py` 逐字相同（AST 完全一致），
+    # 改错误提示文案时容易只改一处。这里只保留扫描模式独有的 `_notify_state_changed`。
 
     def _notify_state_changed(self, is_running: bool):
         """通知 UI 运行状态变化"""
         if self.on_state_changed:
             self.on_state_changed(is_running)
-
-    def _show_result(self, text: str, status: bool = False, display: str = None) -> bool:
-        """显示结果（status=True 表示状态消息，不参与翻译）
-
-        Returns:
-            bool: True 表示已交给翻译链路，调用方不要再朗读原文
-        """
-        if self.on_result:
-            return bool(self.on_result(self.MODE, text, status, display))
-        return False
-
-    def _report_error(self, error):
-        """报告异常：显示错误信息并更新状态栏"""
-        self._show_result(str(error), status=True, display=f"[{self.LABEL}错误] {error}")
-        self._update_status("错误")

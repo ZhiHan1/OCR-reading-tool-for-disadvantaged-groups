@@ -1,23 +1,12 @@
 """仅通过 --self-test 显式执行的发布版自检，输出 JSON 报告。"""
-import importlib
 import json
 import os
 from pathlib import Path
 import sys
 import traceback
 
+from qt_web.release_check_common import imports, save
 
-def save(report, path):
-    Path(path).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-
-def imports(names):
-    out={}
-    for name in names:
-        try:
-            importlib.import_module(name);out[name]='ok'
-        except Exception:
-            out[name]=traceback.format_exc()
-    return out
 
 def gui_check(path):
     report={'imports':imports(['PySide6.QtWebEngineWidgets','PySide6.QtWebChannel','rapidocr',

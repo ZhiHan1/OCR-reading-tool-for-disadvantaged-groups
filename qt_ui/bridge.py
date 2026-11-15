@@ -35,10 +35,6 @@ class SignalBridge(QObject):
     result_received = Signal(str, str, bool, str)
     # 运行状态变化（bool）
     state_changed = Signal(bool)
-    # 翻译状态（str）
-    translate_status = Signal(str)
-    # 翻译结果（str）
-    translate_result = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -75,14 +71,6 @@ class SignalBridge(QObject):
     def emit_state_changed(self, is_running: bool):
         """后端线程调用：on_state_changed(is_running)"""
         self._safe_invoke("state_changed", bool(is_running))
-
-    def emit_translate_status(self, status: str):
-        """后端线程调用：翻译 on_status_update(status)"""
-        self._safe_invoke("translate_status", str(status))
-
-    def emit_translate_result(self, result: str):
-        """后端线程调用：翻译 on_result(result)"""
-        self._safe_invoke("translate_result", str(result))
 
     # ---- 内部 ----
 

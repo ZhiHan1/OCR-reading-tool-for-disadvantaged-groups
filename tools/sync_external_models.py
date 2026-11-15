@@ -20,6 +20,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from model_dirs import KINDS, MODEL_FILES, detect_kind
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # (源相对路径, 目标相对路径)。前两个是识别模型，后两个是运行时必需件。
@@ -36,22 +38,7 @@ OCR_DIRS = (
 )
 
 MODEL_FILES = ('config.yaml', 'model.pt')
-# FunASR config.yaml 的 model 字段 → 目录簿里的 kind
-KINDS = {
-    'SenseVoiceSmall': 'sensevoice',
-    'BiCifParaformer': 'paraformer_large',
-    'Paraformer': 'paraformer_large',
-}
 IGNORE = shutil.ignore_patterns('.cache', '__pycache__', '*.bak', '*.tmp')
-
-
-def detect_kind(directory):
-    try:
-        import yaml
-        data = yaml.safe_load((directory / 'config.yaml').read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        return None
-    return KINDS.get(data.get('model')) if isinstance(data, dict) else None
 
 
 def copy_tree(source, target):

@@ -442,8 +442,10 @@ class WebMainWindow(QMainWindow):
                 lambda running, m=mode: self.api.push_scan_state(m, bool(running))
             )
 
-        self.app.translation.on_status_update = self.bridge.emit_status
-        self.app.translation.on_result = self.bridge.emit_result
+        # 说明：翻译结果不经控制器回调，而是走 TranslationManager 的队列
+        # （main.py 下方 drain_results → api.push_translate_result）。
+        # TranslationController 没有 on_result / on_status_update，别再接回来——
+        # 它的签名与 bridge.emit_result 不匹配，接了会推空白消息。
 
     # 说明：Web UI 的语音识别跑在独立进程（qt_web.voice_session），
     # GUI 进程里不构造 voice_input / asr_service —— 它们只服务旧 tkinter 版，

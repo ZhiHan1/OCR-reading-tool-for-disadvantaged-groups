@@ -1,8 +1,18 @@
 """
 翻译控制器 - 管理翻译功能的业务逻辑
-职责：协调翻译服务，处理翻译请求，管理翻译状态
+职责：切换翻译后端、查询模型信息
+
+注意：本类**不负责执行翻译**。
+
+历史上的 ``translate(text)`` 是同步阻塞调用，结果只通过 ``on_result(result)``
+回调送出、没有返回值；而现在翻译统一走 ``controllers.translation_manager`` 的
+后台队列（``enqueue_manual``），结果经由 ``result_queue`` 回到主线程再推前端。
+那条回调还有个真实 Bug：它调用 ``on_result(result)`` 只传一个字符串，而
+``qt_ui/bridge.emit_result`` 期望 ``on_result(mode, text, status, display)``
+四参数，接错了会把译文当成 mode、文本变成空——只是无人调用才没暴露。
+因此 ``translate()`` 与 ``on_result`` / ``on_status_update`` 一并删除，
+需要翻译请用 ``TranslationManager``。
 """
-from typing import Optional, Callable
 from core.translation_service import TranslationService
 
 
@@ -17,44 +27,6 @@ class TranslationController:
             translation_service: 翻译服务实例
         """
         self.translation_service = translation_service
-
-        # 回调函数
-        self.on_result: Optional[Callable] = None
-        self.on_status_update: Optional[Callable] = None
-
-    def translate(self, text: str):
-        """
-        翻译文本
-
-        Args:
-            text: 要翻译的文本
-        """
-        if not text or not text.strip():
-            if self.on_status_update:
-                self.on_status_update("请输入要翻译的文本")
-            return
-
-        try:
-            # 更新状态
-            if self.on_status_update:
-                self.on_status_update("正在翻译...")
-
-            # 执行翻译
-            result = self.translation_service.translate(text)
-
-            # 返回结果
-            if self.on_result:
-                self.on_result(result)
-
-            # 更新状态
-            if self.on_status_update:
-                self.on_status_update("翻译完成")
-
-        except Exception as e:
-            error_msg = f"翻译失败: {e}"
-            print(f"[翻译控制器] {error_msg}")
-            if self.on_status_update:
-                self.on_status_update(error_msg)
 
     def get_available_models(self):
         """获取可用翻译模型列表"""
@@ -71,17 +43,4 @@ class TranslationController:
         Args:
             model_key: 模型标识
         """
-        try:
-            if self.on_status_update:
-                self.on_status_update(f"正在切换到模型: {model_key}")
-
-            self.translation_service.switch_model(model_key)
-
-            if self.on_status_update:
-                self.on_status_update(f"已切换到模型: {model_key}")
-
-        except Exception as e:
-            error_msg = f"切换模型失败: {e}"
-            print(f"[翻译控制器] {error_msg}")
-            if self.on_status_update:
-                self.on_status_update(error_msg)
+        self.translation_service.switch_model(model_key)

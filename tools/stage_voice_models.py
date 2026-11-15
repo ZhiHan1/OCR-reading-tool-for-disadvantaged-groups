@@ -9,30 +9,9 @@ import shutil
 import sys
 from pathlib import Path
 
-import yaml
+from model_dirs import KINDS, MODEL_FILES, RUNTIME_MODELS, VOICE_MODELS, detect_kind
 
 ROOT = Path(__file__).resolve().parents[1]
-
-# 语音识别模型：(源目录相对路径, 模型 id, 显示名)。目录不存在则跳过。
-VOICE_MODELS = [
-    ('模型/语音/SenseVoiceSmall', 'sensevoice', 'SenseVoice-Small'),
-    ('模型/语音/paraformer-large', 'paraformer_large', 'Paraformer-Large'),
-]
-
-# 运行时必需件：(源目录, 发布目录内相对路径)。缺一不可。
-RUNTIME_MODELS = [
-    ('models/asr/fsmn-vad', 'models/asr/fsmn-vad'),
-    ('models/asr/ct-punc', 'models/asr/ct-punc'),
-]
-
-# FunASR config.yaml 里的 `model` 字段 → 发布用 kind
-KINDS = {
-    'SenseVoiceSmall': 'sensevoice',
-    'BiCifParaformer': 'paraformer_large',
-    'Paraformer': 'paraformer_large',
-}
-
-MODEL_FILES = ('config.yaml', 'model.pt')
 
 
 def copy_model(source: Path, target: Path):
@@ -44,16 +23,6 @@ def copy_model(source: Path, target: Path):
         copy_function=shutil.copy2,
         ignore=shutil.ignore_patterns('.cache', '__pycache__'),
     )
-
-
-def detect_kind(directory: Path):
-    config = directory / 'config.yaml'
-    try:
-        data = yaml.safe_load(config.read_text(encoding='utf-8'))
-    except (OSError, yaml.YAMLError):
-        return None
-    architecture = data.get('model') if isinstance(data, dict) else None
-    return KINDS.get(architecture)
 
 
 def stage(output):
