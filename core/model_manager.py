@@ -69,14 +69,16 @@ class ModelManager:
                         # 规范化路径（统一使用正斜杠）
                         abs_path = os.path.abspath(abs_path)
 
-                        # 检查文件是否存在
+                        # 检查文件是否存在。文件已被删/移走的记录必须丢弃：
+                        # 以前这里照样塞进 valid_models，只打一条警告，结果设置页的
+                        # 「本地模型」下拉里会列出根本打不开的模型（用户看到幽灵条目）。
+                        # 丢弃后 active_model 若指向它，下面的重置逻辑会清空。
+                        # 文件回来时不用慌：scan() 会在投放目录里重新发现并登记。
                         if os.path.exists(abs_path):
                             model_info['path'] = abs_path
                             valid_models[model_id] = model_info
                         else:
-                            model_info['path'] = abs_path
-                            valid_models[model_id] = model_info
-                            print(f"[模型管理器] 警告：模型路径失效，请重新导入: {model_id} ({abs_path})")
+                            print(f"[模型管理器] 已移除失效记录（文件不存在）: {model_id} ({abs_path})")
 
                     self.models = valid_models
                     self.active_model = data.get('active_model')
@@ -87,6 +89,12 @@ class ModelManager:
                         print("[模型管理器] 警告：活动模型不存在，重置为 None")
                         self.active_model = None
                         self.active_model_path = None
+
+                    # 有失效记录被剔除时立刻写回，否则磁盘上的旧配置会在下次启动
+                    # 又读回来（每次启动都重复警告一次，下拉也治不干净）。
+                    if len(valid_models) != len(models):
+                        print(f"[模型管理器] 已清理 {len(models) - len(valid_models)} 条失效模型记录并写回配置")
+                        self._save_config()
 
                     print(f"[模型管理器] 已加载 {len(self.models)} 个模型")
                     if self.active_model_path:
@@ -297,11 +305,17 @@ class ModelManager:
         """
         获取所有模型列表
 
+        只返回**文件确实存在**的模型。`_load_config` 已经会剔除失效记录，
+        这里再兜一次底：运行期间文件被删、或配置被外部改写时，列表同样
+        不能出现打不开的模型（否则设置页下拉就是一个点不开的幽灵条目）。
+
         Returns:
             模型信息列表
         """
         models_list = []
         for model_id, info in self.models.items():
+            if not os.path.exists(info.get('path', '')):
+                continue
             models_list.append({
                 'id': model_id,
                 'name': info['name'],
@@ -321,6 +335,8 @@ class ModelManager:
         """
         if self.active_model and self.active_model in self.models:
             info = self.models[self.active_model]
+            if not os.path.exists(info.get('path', '')):
+                return None
             return {
                 'id': self.active_model,
                 'name': info['name'],

@@ -277,6 +277,59 @@ py -3.14 -c "from llama_cpp import llama_cpp as L; print(L.llama_supports_gpu_of
 
 复测前请确认模型路径 `模型/翻译/HY-MT1.5-1.8B-Q6_K.gguf` 存在（1406.5 MB）。
 
+## 9. 本地模型下拉出现「不存在的模型」（KB-TR-007，已修复）
+
+**现象**（2026-11-15 用户报告）：设置 → 翻译 → 本地模型下拉里列出了打不开的模型。
+启动日志同时有「模型路径失效，请重新导入」两条警告，但那两条照样显示在下拉里。
+
+**根因**（`core/model_manager.py::_load_config`，自首个提交 `06a3445` 就存在）：
+
+```python
+if os.path.exists(abs_path):
+    valid_models[model_id] = model_info
+else:
+    model_info['path'] = abs_path
+    valid_models[model_id] = model_info   # ← 文件不存在也照样进列表
+    print(f"警告：模型路径失效，请重新导入: {model_id}")
+```
+
+**失效记录为什么会「一直在那里不动」**（用户的关键一問）：
+
+| 环节 | 实际行为 |
+| --- | --- |
+| 扫描时机 | 启动后 `_later(0, _scan_model_folders)` + `QTimer` 每 3 秒（语音/设置页）或 30 秒（其它页）。见 `qt_web/api.py:68-72` |
+| 扫描做什么 | `ModelDiscovery.candidates()` 只**遍历目录找新的 gguf**，从不检查 `models_config.json` 里已有记录的文件是否还在 |
+| 所以 | `scan()` 只能「加」，不能「删」。文件被删的记录没人清理，每次启动由 `_load_config` 原样读回 |
+
+**修法**（三处，缺一不可）：
+
+1. `_load_config()`：文件不存在 → **不加入** `valid_models`，只打印「已移除失效记录」。
+2. `_load_config()` 末尾：有记录被剔除就 `self._save_config()` **写回磁盘**。
+   不写回的话下次启动又从旧配置读回来，警告每启动一次刷一遍。
+3. `get_all_models()` / `get_active_model()`：再兜一次 `os.path.exists` 过滤。
+   运行期间文件被删、或配置被外部改写时，下拉同样不能出现幽灵条目。
+
+`active_model` 指向失效文件时，已有的「活动模型不存在，重置为 None」分支会自动清空，
+**这一步很关键**：`qt_web/api.py::translation_usable()` 只要看到某个模型 `is_active`
+就认为「翻译可用」，失效模型留在活动位上会让翻译静默失败（既不显原文也不显译文）。
+
+**文件回来了怎么办**：不用慌。用户确认采用「扫描时直接删记录」，
+所以记录可以放心删；文件重新出现在 `模型/翻译/` 里时，`scan()` 会在稳定两轮后
+重新登记（代价是用户自定义的显示名会丢，这是有意的取舍）。
+
+**守门测试**：`tests/test_model_manager_invalid.py`（7 项，不依赖真实权重）。
+反向验证三组全部捕获：① 失效记录进 `valid_models` ② 不写回磁盘 ③
+`get_all_models` 不兜底。
+
+> ⚠️ 写这类测试时**两个补丁必须同时生效**：`ModelManager.__init__` 不暴露
+> `models_dir`，而 `ModelDiscovery` 是在 `__init__` 里构造的。只补丁其中一个，
+> 测试会直接改写用户的真实 `models/local/models_config.json`
+> （本次确实发生过，往真实配置里塞了一条指向临时目录的 ghost 记录，已清理）。
+> 另外 `ModelDiscovery` 的 `base` 必须是**投放目录的父级**，设成投放目录自身会让
+> `store_path()` 退化成裸文件名、与 `path_key()` 的绝对路径永不相等，
+> `scan()` 永远不登记——那是脚手架假失败。
+
 **变更记录**：2026-11-05 新建。记录提示词/采样 A/B 实测（套对话模板有害）、
 `max_tokens` 在 447 字截断、`n_ctx=2048` 余量约 1600 字、
 llama-cpp-python 无官方 CUDA wheel、本机为纯 CPU 版。
+2026-11-15 补 §9（KB-TR-007）失效模型记录清理。
