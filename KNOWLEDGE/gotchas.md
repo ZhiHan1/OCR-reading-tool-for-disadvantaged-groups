@@ -143,6 +143,42 @@ AttributeError: 'ModelRegistry' object has no attribute 'remove'
 **删方法的正确顺序**：先全局 `grep` 方法名（含 `dist/`、`tools/` 之外的
 所有 `*.py`），确认零调用后再删；删完立刻补一条扫描型守门测试。
 
+### 6.2.3 反向验证脚本必须 `try/finally` 还原（KB-GOT-015）
+
+**真实事故**：2026-11-15 做重复实现审查时，反向验证脚本在 `try` 块中途崩了
+（PowerShell 控制台用 GBK 打印中文，`print` 抛 `UnicodeEncodeError`），
+**没走到还原那一步**，源文件 `controllers/scan_mode_controller.py` 停在
+「继承被去掉」的破坏状态。当时只看到「有个测试还在 FAIL」，差点误判成
+修复没生效。
+
+**规则**：任何「改坏源文件 → 跑测试 → 改回」的脚本，还原必须放在
+`finally` 里，且还原后再清一次 `__pycache__`：
+
+```python
+def trial(label, path, old, new):
+    p = Path(path)
+    orig = p.read_bytes()
+    try:
+        p.write_bytes(orig.decode('utf-8').replace(old, new, 1).encode('utf-8'))
+        clear_pyc(p)
+        failed, out = run_tests()
+        print(f'{label}: ' + ('FAILED (caught)' if failed else '!! NOT CAUGHT !!'))
+    finally:                    # ← 崩溃也必须还原
+        p.write_bytes(orig)
+        clear_pyc(p)
+```
+
+**配套检查**：跑完反向验证后，确认工作区状态干净——
+`git status --short` 应只剩**你本来就要改的**文件。若冒出意料之外的
+` M`，说明某个 `trial` 没还原干净。
+
+另外两个细节：
+
+- **别用 PowerShell 直接打印中文**。`PYTHONIOENCODING=utf-8` 只影响 Python
+  自己的编码，控制台代码页是 GBK 时仍可能炸；要么改成只打印 ASCII 标签，
+  要么把结果写文件再读。
+- **每个 `trial` 只破坏一个点**，一次改多处会让「哪个断言失败」变得难判断。
+
 ### 6.3 端到端验证优先于单元验证
 
 实际跑一遍 `api.do_func2_select()` → 截图 → OCR，看能不能出字，

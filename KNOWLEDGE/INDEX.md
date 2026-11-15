@@ -29,12 +29,12 @@
 | 业界（微信/豆包/输入法）用什么方案、我们差在哪 | `asr.md` §9（KB-ASR-007，外部调研） |
 | 翻译怎么调参、为什么翻错、能不能用 GPU | `translation.md`（KB-TR-001~006） |
 | 内存占用、启动速度、线程数 | `performance.md` |
-| 发布包为什么这么大 / 想缩体积 | `performance.md` §13（KB-PERF-013，2026-11-15 最新账单） |
-| CUDA 到底有没有在用、`gpu_runtime` 里哪些文件能删 | `performance.md` §11（KB-PERF-011） |
 | 模型放哪个文件夹、为什么不进安装包、换盘符会不会失效 | `gotchas.md` §9（KB-GOT-012） |
 | 改了代码/测试「没生效」、反向验证结果自相矛盾 | `gotchas.md` §6.2.1（KB-GOT-013，先清 `__pycache__`） |
 | 删了一个方法/接口，怎么确认没有漏掉的调用方 | `gotchas.md` §6.2.2（KB-GOT-014，打包自检是测试死角） |
+| 反向验证脚本中途崩溃，把源文件留在了破坏状态 | `gotchas.md` §6.2.3（KB-GOT-015，必须 `try/finally` 还原） |
 | 哪个 Qt DLL 能删、`opengl32sw`/`cufft`/`cv2` 为什么必须留 | `performance.md` §13（KB-PERF-013）+ `WEB_RELEASE.md` |
+| 两个控制器/两个工具看着像重复，能不能合并 | `performance.md` §14（KB-PERF-014，实际合并了哪几处、哪几处不该动） |
 | 「这里为什么这么写，看着像 Bug」 | `gotchas.md`（默认答案：不是 Bug） |
 
 ## 二、文档清单
@@ -135,6 +135,7 @@
 | KB-PERF-011 | 发布包 CUDA 运行时裁剪：**不能用 torch 是 CPU 版推断 CUDA 没用**、必须用真实模型枚举已加载 DLL、删 5 个省 354 MB、`stage_gpu_runtime.py` 白名单化 | performance.md §11 |
 | KB-PERF-012 | 模型目录体检：`tools/model_audit.py` 四类结果、可删的缓存/`.bak`/空目录、`models/ocr` 与 rapidocr 包内 30.3 MB 重复副本、`do_*`/`_make_*` 动态分发的粗筛陷阱 | performance.md §12 |
 | KB-PERF-013 | 发布包体积账单与瘦身：CUDA 不能瞎删、torch 无法移除、PySide6 按 DLL 依赖闭包裁剪（449→305 MiB）、`opengl32sw` 必须留、`sklearn/numba/llvmlite` 可去、`cv2` 不能去 | performance.md §13 |
+| KB-PERF-014 | 重复实现审查：AST 指纹 + 归一化相似度 + 名词干三种扫描、809 个函数只合了 4 组、合并时发现两处异常捕获范围不同、死代码里藏着的回调签名 bug、**9 类看似重复但不该合并**及 4 条判断标准 | performance.md §14 |
 
 ### TR · 翻译
 
@@ -165,6 +166,7 @@
 | KB-GOT-012 | 权重完全外置：模型在 EXE 同级 `模型/`+`models/`、按 `sys.executable` 解析、打包只出程序本体、启动检测与 `models-missing` 推送 | gotchas.md §9 |
 | KB-GOT-013 | 反向验证必须清 `__pycache__`：同秒 mtime 会复用坏字节码，导致「已还原却仍报错」 | gotchas.md §6.2.1 |
 | KB-GOT-014 | 删方法要全局搜调用方：`release_gui_check.py` 是测试死角，单元测试全绿但打包才炸 | gotchas.md §6.2.2 |
+| KB-GOT-015 | 反向验证脚本必须 `try/finally` 还原：脚本中途崩溃会把源文件留在破坏状态、PowerShell 打印中文可能抛编码错误 | gotchas.md §6.2.3 |
 
 ## 四、维护约定
 

@@ -982,3 +982,125 @@ OCR 真跑出 `OCR TEST 123`、外置模型加载与推理正常。
 `copied_files / copied_bytes / registry / models`，`build_web.py` 依赖它；
 改返回值时 `test_sync_returns_documented_keys` 会失败。
 
+## 14. 重复实现审查（KB-PERF-014，2026-11-15）
+
+用户提问：「检查代码里是否有重复性的功能，或者有高度相似、可以写成统一模块
+调用但被重新写了一遍的功能。」
+
+规模：98 个 Python 文件、19117 行、**809 个函数/方法**。
+
+### 14.1 怎么找（三种互补的扫描）
+
+单靠肉眼或只靠一种方法都会漏，三种一起用：
+
+| 方法 | 抓什么 | 实现 |
+| --- | --- | --- |
+| **AST 指纹** | 实现**完全相同**的函数（哪怕变量名不同） | `ast.dump(node, annotate_fields=False, include_attributes=False)` 做分组，出现 2 次以上即命中 |
+| **归一化相似度** | 结构相同、变量名不同 | 把函数体压成 token 串（标识符按出现顺序重命名 `v0/v1/…`），再用 `difflib.SequenceMatcher`；长度比先过滤（`min/max < 0.85` 跳过），阈值取 0.92 |
+| **名称词干** | 同一职责写了多次 | 去掉 `do_/get_/set_/_make_/ensure_` 等前后缀后比较词干，跨文件同词干即候选 |
+
+⚠ **必须排除 `tests/`**：测试里大量刻意的重复结构（每个用例都设一遍状态），
+算进去会淹没真实信号。同时排除 `build/` `dist/` `.cache/` `archive/`。
+
+**不要只看相似度排名就动手**——第一版扫出来最像的是 20 多个 `__init__`，
+因为它们的结构本来就像。必须逐项去读代码判断。
+
+### 14.2 实测数字
+
+| 扫描项 | 命中 |
+| --- | --- |
+| AST 完全相同（≥4 个 AST 节点） | 7 组 |
+| 归一化相似度 ≥ 0.92 | 若干（多数是 `__init__`，噪声） |
+| 跨文件同名词干 | 数十（多数无害） |
+
+最终**真正动手的只有 4 组**，说明「高度相似」里大部分是合理的。
+
+### 14.3 已合并的 4 组
+
+| 项 | 位置 | 做法 | 收益 |
+| --- | --- | --- | --- |
+| 三个回调逐字重复 | `base_controller.py:41/46/56` vs `scan_mode_controller.py:330/340/350` | `ScanModeController` 改为**继承 `BaseController`**，删掉自己那份 | −17 行，错误文案只改一处 |
+| 失效的翻译回调 | `translation_controller.py` | 删 `translate()` 与 `on_result`/`on_status_update` | −67 行，**顺带修一个真 bug**（见 14.4） |
+| 自检工具函数 | `release_gui_check.py:10,13` vs `release_worker_check.py:9,12` | 抽到 `qt_web/release_check_common.py` | 两份变一份 |
+| 模型目录定义 | `stage_voice_models.detect_kind` vs `sync_external_models.detect_kind`，连同 `KINDS`/`VOICE_MODELS`/`RUNTIME_MODELS`/`MODEL_FILES` | 抽到 `tools/model_dirs.py` | 两份变一份，并**修正两处实现差异** |
+
+净减 **131 行**，新增 2 个共用模块 + 1 个守门测试文件（23 项）。
+
+#### 第 4 组的两处实现差异（合并时的意外收获）
+
+两份 `detect_kind` 长得一样，但：
+
+| 文件 | 捕获的异常 |
+| --- | --- |
+| `stage_voice_models.py` | `(OSError, yaml.YAMLError)` |
+| `sync_external_models.py` | `(OSError, ValueError)` |
+
+`yaml.safe_load` 解析坏 YAML 抛的是 `yaml.YAMLError`（它是 `YAMLError`，
+**不是** `ValueError` 的子类）——所以第二份遇到坏配置文件会**直接抛异常**，
+而不是返回 `None`。合并时统一成 `YAMLError`，并加了
+`test_malformed_yaml_returns_none` 守门。
+
+**教训**：看起来逐行相同的两份实现，差异往往藏在**异常捕获范围**、
+边界条件、默认值里。合并前必须逐行 diff，不能只看相似度分数。
+
+### 14.4 顺带修掉的真实 Bug：翻译回调签名对不上
+
+`qt_web/main.py:446` 曾经是：
+
+```python
+self.app.translation.on_result = self.bridge.emit_result
+```
+
+而两边签名根本不一致：
+
+| 调用方 | 实际调用 |
+| --- | --- |
+| `TranslationController.translate()` | `self.on_result(result)` —— **1 个参数** |
+| `bridge.emit_result` 期望 | `on_result(mode, text, status, display)` —— **4 个参数** |
+
+参数个数对不上 → 走 `emit_result` 的 `else` 分支 → `mode = 译文字符串`、
+`text = ""` → 用户看到一条**空白结果**。
+
+**为什么一直没暴露**：`translate()` 从来没人调用（翻译页改用
+`translation_manager.enqueue_manual()` + 结果队列）。这是典型的
+「死代码里藏着的活 bug」——删死代码时顺手看一眼它接了谁，能捞出真问题。
+
+顺带删掉 `qt_ui/bridge.py` 里**没有任何接收方**的 `translate_status` /
+`translate_result` 两个 signal 与对应 `emit_*` 方法（真正的事件走
+`api.push_translate_result` → WebChannel，不经 bridge）。
+
+### 14.5 看似重复但**不该合并**（重要）
+
+这一节比「合并了什么」更值得记——避免后来者反复纠结或误删：
+
+| 项 | 为什么不动 |
+| --- | --- |
+| `game_mode._speak_new` vs `manga._speak_new`（相似度 0.991） | **语义不同**：游戏模式从 `self.history` 内部取新内容，漫画模式用外部传入的 `new_part`+`full_text` |
+| func3 / 漫画 / 游戏 的 `_prepare_start` / `_on_region_*` | func3 **不持有 history**（用去重服务），默认实现无法统一；强行抽象会引入分支 |
+| `TTSService`（114 行，6 个方法全是一行委托 `TTSManager`） | 被 `app_controller`/`api.py`/`bridge.py`/四个控制器广泛使用。它是**兼容层**，`speak()` 比 `TTSManager.add()` 语义清晰。**保留，但别往里加功能**——新能力加在 `TTSManager` |
+| `_make_func1` / `_make_func2`、`_make_manga_mode` / `_make_game_mode`（相似度 1.000 / 0.991） | 各 6 行，差异就是构造参数（`config` vs `max_history`）。抽象成工厂更难读 |
+| `_ensure_edge_client` vs `_ensure_player`（0.930） | 管理**不同类型的资源**（aiohttp 客户端 vs 音频播放器），生命周期与关闭逻辑不同 |
+| 各 `close()` / `clear()` | 只是名字相同，作用于不同对象 |
+| `TranslationService` / `TranslationManager` 两层 | 职责清晰：Service 管模型加载与懒卸载，Manager 管队列与后台线程。**不是重复** |
+| `device_manager` 的 GPU 探测 | 全仓库唯一实现，`ocr_engine` 只消费结果 |
+| `supports_batch()` 返回 `True`（两个翻译后端） | 3 行，抽象增加跳转成本 |
+
+**判断标准（可复用）**：
+
+1. 两份代码的**输入/输出契约**是否真的相同？不同就不能合。
+2. 合并后是否引入了**分支开关**（`if mode == 'game'`）？引入就说明不该合。
+3. 只有 3~6 行且抽象后要跨文件跳转的，**保持现状更好读**。
+4. 被广泛依赖的转发层，当**兼容层**保留，但要防止往里加功能。
+
+### 14.6 验证
+
+- 单元测试 **133 → 156**，新增 `tests/test_no_duplicate_impl.py`（23 项）
+- **6 组反向验证全部被捕获**：加回 `_show_result`、取消 `BaseController` 继承、
+  加回 `translate()`、`main.py` 重接 `on_result`、自检入口重写 `imports()`、
+  `detect_kind` 退回窄异常
+- 静态守门用 AST 检查「子类不得重新定义基类方法」，比人工 review 可靠
+
+**守门测试为什么写成静态 AST 而不是行为测试**：行为测试只能证明「现在的行为对」，
+证明不了「没有被重复实现」。重复的 `_show_result` 和继承来的 `_show_result`
+行为完全一样，功能测试永远绿。必须直接检查「这个类里有没有定义这个方法」。
+

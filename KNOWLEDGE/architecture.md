@@ -46,13 +46,33 @@ core/* 服务（ocr · asr · tts · translation · model_manager · config …�
 
 | 目录 | 文件数 | 关键文件 |
 | --- | --- | --- |
-| `core/` | 24 | `ocr_engine` `asr_service` `tts` `translation_service` `model_manager` `config_manager` `deduplication_service` `history_manager` `hotwords` `screenshot_service` |
-| `controllers/` | 11 | `app_controller` `base_controller`（func1/func2 共用骨架）`func1_controller` `func2_controller` `func3_controller` `manga_controller` `game_mode_controller` `scan_mode_controller`（扫描类骨架）`translation_manager` `translation_controller` `voice_input_controller` |
-| `qt_web/` | 14 py + web | `main.py` `api.py` `voice_session` `voice_worker` `voice_pipeline` `voice_modes` `cursor_input` `tts_export` `asr_models` |
+| `core/` | 26 | `ocr_engine` `asr_service` `tts`（真实实现）`tts_service`（兼容层）`translation_service` `model_manager` `config_manager` `deduplication_service` `history_manager` `hotwords` `screenshot_service` `device_manager` `audio_capture` |
+| `controllers/` | 11 | `app_controller`（13 个懒构造属性）`base_controller`（所有控制器的根骨架）`func1_controller` `func2_controller` `func3_controller` `manga_controller` `game_mode_controller` `scan_mode_controller`（继承 `base_controller`）`translation_manager`（翻译队列）`translation_controller`（只切后端）`voice_input_controller` |
+| `qt_web/` | 15 py + web | `main.py` `api.py` `bootstrap` `hotkeys` `power_monitor`（电源事件）`voice_session` `voice_worker` `voice_pipeline` `voice_modes` `cursor_input` `tts_export` `asr_models` `release_check_common` + 两个 `release_*_check` |
 | `qt_ui/` | 3（+`__init__`） | `selector` `selector_adapter` `bridge`（旧的 `settings_panel` / `theme` / `widgets` 共 1409 行已于 2026-11-05 删除） |
-| `utils/` | 6 | `paths` `screenshot` `env_limits` `hotkey` `system_tray` `model_discovery` |
-| `tests/` | 3 | `test_selector` `test_asr_quality` `test_hotwords` |
-| `tools/` | 17 | `smoke_gui` `mem_report` `verify_web_release` `stage_*` `download_asr_models` `quantize_gguf` `trim_punc_vocab` |
+| `utils/` | 5 | `paths` `screenshot` `env_limits` `system_tray` `model_discovery`（`hotkey` 已于 2026-11-15 删除，改由 `qt_web/hotkeys.py` 负责） |
+| `tests/` | 11 | `test_selector` `test_backend_refactor` `test_external_models` `test_package_size` `test_sleep_resume` `test_no_duplicate_impl` `test_asr_quality` `test_hotwords` `test_hotword_learning` `test_audio_devices` `test_clean_text` |
+| `tools/` | 23 | `smoke_gui` `mem_report` `verify_web_release` `model_audit` `model_dirs` `stage_*` `sync_external_models` `stage_external_models` `download_asr_models` `quantize_gguf` `trim_punc_vocab` |
+
+### 3.1 控制器继承关系（2026-11-15 起）
+
+```
+BaseController                    ← 回调骨架：_update_status / _show_result / _report_error
+├── Func1Controller               ← 一次性朗读（框选）
+├── Func2Controller               ← 一次性朗读（固定区域）
+└── ScanModeController            ← 扫描类骨架：后台线程 / 去重 / 状态通知
+    ├── Func3Controller
+    ├── MangaController
+    └── GameModeController
+```
+
+**三个回调只在 `BaseController` 里实现一份**。历史上 `ScanModeController` 把
+`_update_status` / `_show_result` / `_report_error` 又写了一遍（AST 完全一致），
+2026-11-15 合并后改为继承。改动原因与反向验证见 KB-PERF-014（performance.md §14）。
+
+⚠ `ScanModeController` 独有的只有 `_notify_state_changed`（运行状态变化），
+别顺手删掉。守门测试 `tests/test_no_duplicate_impl.py` 用 AST 检查
+「子类不得重新定义基类的那三个方法」，行为测试抓不到这种重复。
 
 ## 4. 一次点击的完整调用链（KB-ARC-003）
 

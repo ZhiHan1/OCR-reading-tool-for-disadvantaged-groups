@@ -66,6 +66,16 @@ def _dispatch(self, action, p):
 | `copy_text` | 复制到剪贴板 |
 | `tts_preview` / `tts_export` | 试听 / 导出音频（导出在独立线程） |
 
+⚠ **翻译不要调 `TranslationController.translate()`——它已经删了**。
+翻译统一走 `TranslationManager.enqueue_manual(text, source, target)`，
+结果经 `result_queue` 回到主线程，再由 `api.push_translate_result()` 推前端。
+
+历史坑（KB-PERF-014）：`TranslationController.translate()` 是同步阻塞调用，
+没有返回值，结果只通过 `on_result(result)` 送出；而 `bridge.emit_result`
+期望 `on_result(mode, text, status, display)` 四个参数。接错时译文被当成
+`mode`、文本为空，用户看到空白结果。它在 2026-11-15 被删除，
+`TranslationController` 现在只负责 `switch_model` / 查询模型信息。
+
 ### 3.4 文件与目录
 | 动作 | 说明 |
 | --- | --- |
