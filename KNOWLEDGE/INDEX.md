@@ -26,6 +26,7 @@
 | 业界（微信/豆包/输入法）用什么方案、我们差在哪 | `asr.md` §9（KB-ASR-007，外部调研） |
 | 翻译怎么调参、为什么翻错、能不能用 GPU | `translation.md`（KB-TR-001~006） |
 | 内存占用、启动速度、线程数 | `performance.md` |
+| 发布包为什么这么大、哪些 DLL 能删、CUDA 到底有没有在用 | `performance.md` §11（KB-PERF-011） |
 | 「这里为什么这么写，看着像 Bug」 | `gotchas.md`（默认答案：不是 Bug） |
 
 ## 二、文档清单
@@ -122,6 +123,7 @@
 | KB-PERF-008 | 磁盘占用与 ct-punc 词表裁剪（282→20 MB）；翻译 Q5_K_M 实测弃用 | performance.md §9 |
 | KB-PERF-009 | 代码精简：删 `legacy/`（−8145 行）、合并三个下载脚本、归档 4 份根目录文档；哪些「无 import」模块其实在用；UI 层 3 套→1 套（再删 1739 行）；`smoke_gui` `radios` 假阴性 | performance.md §10 |
 | KB-PERF-010 | 后端整体审查：去重（base_controller、`_read_stable_frames`、13 个 property、TTS 等待循环、翻译后端表）、`CSafeLoader` 快 7~8 倍、删 20 个无用 import；8 条 pyflakes 为何保留；全量回归结果 | performance.md §10.9 |
+| KB-PERF-011 | 发布包 CUDA 运行时裁剪：**不能用 torch 是 CPU 版推断 CUDA 没用**、必须用真实模型枚举已加载 DLL、删 5 个省 354 MB、`stage_gpu_runtime.py` 白名单化 | performance.md §11 |
 
 ### TR · 翻译
 

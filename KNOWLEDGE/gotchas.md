@@ -193,8 +193,12 @@ staging（OCR 权重 / 语音模型 / CUDA 运行库）→ `verify_web_release.p
 - 语音模型目录里若混入 `.gguf/.safetensors/.ckpt`，staging 直接报错，
   防止误把 1.4 GB 翻译模型打进语音目录。
 - 构建机需要 `py -3.14`、PyInstaller、以及 `nvidia-*` 运行库包；
-  `stage_gpu_runtime.py` 复制 cublas / cudart / cufft / cudnn / nvrtc 到
-  `_internal/gpu_runtime`，缺任何一个都失败。
+  `stage_gpu_runtime.py` 按**精确白名单**把 cublas / cudart / cufft / cuDNN 的
+  11 个 DLL 复制到 `_internal/gpu_runtime`，缺任何一个都失败。
+  **不要改回通配符**：`cudnn*64_9.dll` 会多带 5 个 OCR 用不到的库（+354 MB），
+  删法、验证方法与为什么不能整删，见 `performance.md` §11（KB-PERF-011）。
+  另外 `onnxruntime_providers_cuda.dll`（298 MB）由 PyInstaller 收在
+  `_internal/onnxruntime/capi/`，不在 `gpu_runtime`，对账时别当成缺失。
 - 自检项含：6 个页面、GPU 实际推理、OCR 推理、GGUF 外置推理、
   worker IPC 录音启停、双 EXE 依赖隔离。`release-test.json` 的 `ok=true` 才算通过。
 - 2026-11-05 的改动：`stage_voice_models.py` 与 `verify_web_release.py`

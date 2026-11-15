@@ -523,3 +523,128 @@ else run();                                // 只有首次进入才同步
 同日补充：删除旧 Qt 设置面板与两套失效 spec / 构建脚本（1739 行），
 UI 层精简为 Web 版一套；修 `smoke_gui` 的 `radios` 假阴性。
 第三批：后端去重与清理（见 §10.9），修 `max_tokens` 截断；全量回归 41 项测试通过。
+## 11. 发布包 CUDA 运行时裁剪（KB-PERF-011）
+
+> 日期：2026-11-15。改动前备份在
+> `D:\Project_File\语音朗读工具\OCR_备份_CUDA裁剪_20261115-125402`（仅 `stage_gpu_runtime.py`；
+> 被删的 DLL 都能从 pip 包 `nvidia-*` 原样恢复）。
+
+### 11.1 先回答「CUDA 到底有没有在用」
+
+发布包 4.80 GB 里 `_internal/gpu_runtime` 占 **2197.8 MB（45%）**，是单项最大占用，比
+语音模型（867 MB）还大。看到 `torch 2.15.0+cpu`（`cuda.is_available()=False`）很容易
+下「这 2.15 GB 是白占的」的结论——**这个结论是错的**。
+
+| 组件 | 跑在哪 | 依据 |
+| --- | --- | --- |
+| ASR（funasr + torch） | **CPU** | `torch 2.15.0+cpu`，`torch.version.cuda is None` |
+| 翻译（llama.cpp） | **CPU** | `n_gpu_layers=0`，见 `translation.md` §7 |
+| OCR（onnxruntime） | **CUDA** | `onnxruntime-gpu 1.24.1`，真实模型 session 里 `CUDAExecutionProvider` 生效 |
+
+`core/device_manager.py::_ensure_nvidia_dll_path()` 与 `qt_web/bootstrap.py` 都会把
+`gpu_runtime` 塞进 `PATH` + `os.add_dll_directory()`，**只为 onnxruntime 的 CUDA
+provider 服务**，和 torch 无关。所以 torch 是 CPU 版并不影响 CUDA 运行库的必要性。
+
+**决定性证据**（不能只看 `get_available_providers()`，它只说明 DLL 注册了，不说明能跑）：
+
+```python
+# 创建 session 后必须看 get_providers()，并真的 run 一次
+sess = ort.InferenceSession(model, so, providers=['CUDAExecutionProvider','CPUExecutionProvider'])
+sess.run(None, {inp.name: data})
+print(sess.get_providers())   # ['CUDAExecutionProvider', 'CPUExecutionProvider']
+```
+
+只请求 `['CUDAExecutionProvider']` 而缺 DLL 路径时，ORT 会**静默回退**到
+`['CPUExecutionProvider']` 且不报错，必须显式检查 `get_providers()` 才知道退没退。
+
+### 11.2 不能整体删除，但能删 354 MB
+
+真正的判据不是「猜哪个库用不上」，而是**枚举进程内实际加载的模块**。用
+`CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32)` 遍历
+`MODULEENTRY32W.szExePath`，把 `gpu_runtime` 里的文件逐个对账。
+
+结果：真实 OCR 模型一共加载 **11 个** CUDA DLL，其余 5 个从未出现。
+
+| 保留（11 个，1843.8 MB） | 大小 | 说明 |
+| --- | --- | --- |
+| `cublasLt64_12.dll` | 637.7 MB | 矩阵乘 |
+| `cudnn_engines_precompiled64_9.dll` | 503.7 MB | **只有真实模型才加载** |
+| `cufft64_11.dll` | 273.8 MB | 卷积 FFT 路径 |
+| `cudnn_ops64_9.dll` | 100.8 MB | **只有真实模型才加载** |
+| `cublas64_12.dll` | 97.8 MB | 矩阵乘 |
+| `cudnn_graph64_9.dll` | 95.3 MB | 计算图引擎 |
+| `cudnn_heuristic64_9.dll` | 90.4 MB | **只有真实模型才加载** |
+| `cudnn_engines_runtime_compiled64_9.dll` | 43.3 MB | **只有真实模型才加载** |
+| `cudnn_engines_tensor_ir64_9.dll` | 0.1 MB | **只有真实模型才加载** |
+| `cudart64_12.dll` | 0.6 MB | 运行时不依赖 |
+| `cudnn64_9.dll` | 0.3 MB | cuDNN 分发包入口 |
+
+| 删除（5 个，354.0 MB） | 大小 | 理由 |
+| --- | --- | --- |
+| `cudnn_adv64_9.dll` | 258.4 MB | RNN/LSTM 高级算子，OCR 只用 CNN |
+| `nvrtc64_120_0.dll` | 85.7 MB | 运行时编译，仅 TensorRT 用；发布包不含 TensorRT provider |
+| `nvrtc-builtins64_129.dll` | 6.9 MB | 同上 |
+| `cudnn_cnn64_9.dll` | 2.9 MB | cuDNN 9 已拆成 engines 分包，此接口库无人加载 |
+| `cudnn_ext64_9.dll` | 0.1 MB | 扩展算子，无人加载 |
+
+**验证方式**（不是「删了看看软件能不能开」，而是「只留这 11 个，跑真实模型」）：
+把 11 个文件复制到临时目录 → 该目录进 `PATH` + `add_dll_directory` →
+`PP-OCRv6_det_small.onnx` / `PP-OCRv6_rec_small.onnx` /
+`ch_ppocr_mobile_v2.0_cls_mobile.onnx` 三个都建 session 并 `run` 一次
+→ **3/3 `MODEL_OK`，provider 仍是 `CUDAExecutionProvider`，11 个 DLL 全部加载，零误判**。
+
+### 11.3 两个必须记住的坑
+
+**（1）小测试模型会给出错误结论 —— 必须用真实模型验证**
+
+第一次验证用的是自造的 4×4 `MatMul` ONNX 模型，它只触发 6 个 DLL：
+`cublas / cublasLt / cudart / cudnn64 / cudnn_graph / cufft`。
+
+按这个结果去删，会连 `cudnn_engines_precompiled`（503.7 MB）、`cudnn_ops`（100.8 MB）、
+`cudnn_heuristic`（90.4 MB）、`cudnn_engines_runtime_compiled`（43.3 MB）、
+`cudnn_engines_tensor_ir`（0.1 MB）一起删掉——**合计 738 MB，删完 OCR 直接崩**。
+真实卷积网络才需要 cuDNN 9 的 engine 子系统，玩具模型一个 MatMul 走不到那里。
+
+> 结论：涉及「哪些二进制是必需的」，验证用的必须是**线上真实权重**，
+> 拿玩具模型跑通只能证明链路通，证明不了依赖完整。
+
+**（2）`onnxruntime_providers_cuda.dll` 不在 `gpu_runtime` 里**
+
+它在 `_internal/onnxruntime/capi/`，298.1 MB，由 PyInstaller 的 hook 自动收集，
+`stage_gpu_runtime.py` 不管它。清单对账时如果把它当成「缺失」，会误以为打包漏了文件。
+`verify_web_release.py` 也单独有一项 `cuda_provider` 检查它存在、
+且**不存在** `onnxruntime_providers_tensorrt.dll`（没有 TensorRT 是 `nvrtc*` 可删的前提）。
+
+### 11.4 构建脚本改成白名单
+
+根因在 `tools/stage_gpu_runtime.py`：原来 cuDNN 用的是通配符 `cudnn*64_9.dll`，
+把 pip 包 `nvidia-cudnn-cu12` 里的**所有** DLL 全抄进 `gpu_runtime`，包括那 5 个
+用不到的。只删磁盘上的文件治标不治本，下次打包又会带回来。
+
+已改成显式白名单：
+
+- `REQUIRED`：包名 → **精确文件名列表**（不再有通配符），缺任何一个直接 `RuntimeError`；
+- `EXCLUDED`：记录 5 个明确排除的文件及理由，将来 pip 包升级出现同名文件也不会被误收；
+- 写出的 `gpu-runtime-manifest.json` 只含 11 条，`verify_web_release.py` 的
+  `gpu_runtime_assets` 逐条校验大小，清单与磁盘不一致就打包失败。
+
+改动后核对：脚本想要 11 个，磁盘上正好 11 个，**缺失 0、多余 0、命中 `EXCLUDED` 0**。
+
+### 11.5 结果与后续
+
+| 项 | 前 | 后 |
+| --- | --- | --- |
+| `gpu_runtime` | 2197.8 MB（16 文件） | **1843.8 MB（11 文件）** |
+| 发布包总量 | 4.80 GB | **约 4.55 GB** |
+
+**还能再小的部分（均未做，需要先决策）**：
+
+| 候选 | 可省 | 拦路点 |
+| --- | --- | --- |
+| Paraformer 转 INT8 ONNX | 约 0.5 GB | 会丢热词，且 6/6 样本不足以定论（见 §8） |
+| 移除 `cv2` | 111.8 MB | 需确认 OCR 预处理是否真用 |
+| 移除 `sklearn` / `llvmlite` | 约 126 MB | 需确认是否只是 funasr 的间接依赖 |
+| 移除 PySide6 的 qml/translations 等 | 数百 MB | 需逐目录试删，Qt 插件缺失会静默失效 |
+
+**变更记录**：2026-11-15 CUDA 运行时白名单化，删 5 个未加载 DLL（354.0 MB），
+真实 OCR 模型 3/3 复验通过；`tools/stage_gpu_runtime.py` 改精确清单。
